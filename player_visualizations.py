@@ -25,6 +25,7 @@ import clipboard
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 
+""" 
 # Variables
 data_download_loc = '/Users/Mao/Downloads'
 chrome_driver_loc = '/Users/Mao/Downloads/chromedriver-mac-arm64/chromedriver'
@@ -78,13 +79,16 @@ os.chdir(data_download_loc)
 files = sorted(os.listdir(os.getcwd()), key=os.path.getmtime)
 df_base = pd.read_csv(f'{data_download_loc}/{files[-1]}')
 os.rename(f'{data_download_loc}/{files[-1]}', f'result {match}.csv')
+"""
+
+df_base = pd.read_csv(r'/Users/Mao/Downloads/result Union St. Gilloise 4-1 Eupen.csv') 
 
 df_base = df_base.loc[df_base['playerId'] == 134493]    # Add this to the function
     
     
 matplotlib.rcParams['figure.dpi'] = 300
 
-end_color_h = '#1E88E5'                #!!!!! CHANGE THIS TO MATCH THE OFFSIDE/ONSIDE TEMPLATE !!!!!
+end_color_h = '#FF4500'                #!!!!! CHANGE THIS TO MATCH THE OFFSIDE/ONSIDE TEMPLATE !!!!!
 end_color_a = '#D81B60'                # Add this to the function
 kitline_h = '#a8d0f5'
 kitline_a = '#f29aba'
@@ -229,6 +233,7 @@ for i in range(len(df_base)):
                 df_base['GoalMouthZ'][i] = mouthz
             else:
                 k +=1
+"""
 try:            
         for i in range(len(df_base)):
             tid = df_base.teamId[i]
@@ -241,6 +246,7 @@ try:
                     df_base.teamId[i] = teamId_h
 except:
         pass
+
     #####################
 
 df_base['RedCard'] = 0
@@ -253,11 +259,13 @@ for i in range(len(df_base)):
                 df_base['RedCard'][i] = 1
             else:
                 j +=1
+"""
                 
 ################################################################################
 #                               Passing heat map setup                         #
 ################################################################################
                 
+     
                 
 df = df_base.copy()
 df = df[(df['Corner']==0) & (df['FK']==0) & (df['IFK']==0) & (df['GK']==0) & (df['ThrowIn']==0)]
@@ -269,8 +277,11 @@ xT_rows, xT_cols = xT.shape
 
 df['x1_bin_xT'] = pd.cut(df['x'], bins=xT_cols, labels=False)
 df['y1_bin_xT'] = pd.cut(df['y'], bins=xT_rows, labels=False)
+df['x2_bin_xT'] = pd.cut(df['endX'], bins=xT_cols, labels=False)
+df['y2_bin_xT'] = pd.cut(df['endY'], bins=xT_rows, labels=False)
 
 df['start_zone_value_xT'] = df[['x1_bin_xT', 'y1_bin_xT']].apply(lambda x: xT[x[1]][x[0]], axis=1)
+df['end_zone_value_xT'] = df[['x2_bin_xT', 'y2_bin_xT']].apply(lambda x: xT[x[1]][x[0]], axis=1)
 
 df['xT'] = df['end_zone_value_xT'] - df['start_zone_value_xT']
 
@@ -283,7 +294,7 @@ norm.autoscale(colors)
 #                               Passing heat map creation                      #
 ################################################################################
 
-pitch = Pitch(pitch_type='opta', pitch_color='#FF4500', line_color='#F7FFFF', line_zorder=5, half=False)     
+pitch = Pitch(pitch_type='opta', pitch_color='#F7FFFF', line_color='#4A2E19', line_zorder=5, half=False)     
 bins = (36, 19)
 
 maxstat = pitch.bin_statistic(df.x, df.y,
@@ -291,40 +302,42 @@ maxstat = pitch.bin_statistic(df.x, df.y,
 maxstatend = pitch.bin_statistic(df.endX, df.endY,
                                     df.xT, statistic='sum', bins=bins,)
 
-dfh = df[df['playerId']==teamId_h].reset_index(drop=True)
+#dfh = df[df['playerId']==teamId_h].reset_index(drop=True)
 
-pitch = Pitch(pitch_type='opta', pitch_color='#fbf9f4', line_color='#4A2E19', line_zorder=5, half=False)
+pitch = Pitch(pitch_type='opta', pitch_color='#F7FFFF', line_color='#4A2E19', line_zorder=5, half=False)
 fig, ax = pitch.draw(figsize=(6.276, 6.276/2))
-fig.set_facecolor('#fbf9f4')
+#fig.set_facecolor('#FF4500')
 
-my_cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ['#fbf9f4',end_color_h])
+my_cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ['#F7FFFF', end_color_h])
 # blank_hmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ['#fbf9f4','#fbf9f4'])
 
 bins = (36, 19)
-bs_heatmap = pitch.bin_statistic(df[df['playerId']==teamId_h].x, df[df['playerId']==teamId_h].y,
-                                  values=df[df['playerId']==teamId_h].xT, statistic='sum', bins=bins,)
+bs_heatmap = pitch.bin_statistic(df[df['playerId']==134493].x, df[df['playerId']==134493].y,
+                                  values=df[df['playerId']==134493].xT, statistic='sum', bins=bins,)
 bs_heatmap['statistic'] = gaussian_filter(bs_heatmap['statistic'], 1)
 
 ####################################################
 # EDITING THE VISUALIZATION
 
-hm = pitch.heatmap(bs_heatmap, ax=ax, cmap=my_cmap, edgecolor='#fbf9f4', vmin=0, lw=.1,
-                    vmax=np.percentile(maxstat['statistic'],95)
+hm = pitch.heatmap(bs_heatmap, ax=ax, cmap=my_cmap, edgecolor='#F7FFFF', vmin=0, lw=.1,
+                    vmax=np.percentile(maxstat['statistic'],95) #FF4500
                           )
-
-ax.text(50, 102, "%s Passing Heatmap" %name_h,
+"""
+ax.text(50, 102, "" %name_h,
                           color='#4A2E19',
                           va='bottom', ha='center',
                           fontproperties=fprop,
                           fontsize=22)
 
-ax.text(50,-2, 'Direction of Attack --->',
+ax.text(50,-2, '',
                           color='#4A2E19',va='top', ha='center',
                           fontproperties=fprop,fontsize=13)
+"""
 
 fig=plt.gcf()
 fig.set_size_inches(6.276,6.276/2) #length, height
-fig.patch.set_facecolor('#fbf9f4')
+fig.patch.set_facecolor('#F7FFFF')
 
-fig.savefig(f"{img_save_loc}/Home xT By Zone Start.png", dpi = 300)
+#fig.savefig(f"Users/Mao/Documents/Offside:onside/code/Home xT By Zone Start.png", dpi = 300)
 plt.clf()
+print(bs_heatmap['statistic'])

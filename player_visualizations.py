@@ -13,7 +13,8 @@ import time
 import numpy as np
 import matplotlib
 from matplotlib.colors import to_rgba
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, LogNorm
+import matplotlib.transforms as transforms
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -24,6 +25,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import clipboard
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
+
+import matplotlib.colors as mcolors
 
 """ 
 # Variables
@@ -83,7 +86,7 @@ os.rename(f'{data_download_loc}/{files[-1]}', f'result {match}.csv')
 
 df_base = pd.read_csv(r'/Users/Mao/Downloads/result Union St. Gilloise 4-1 Eupen.csv') 
 
-df_base = df_base.loc[df_base['playerId'] == 134493]    # Add this to the function
+#df_base = df_base.loc[df_base['playerId'] == 134493]    # Add this to the function
     
     
 matplotlib.rcParams['figure.dpi'] = 300
@@ -99,245 +102,136 @@ name_a = 'Away' # Add to the function
 URL = 'https://github.com/googlefonts/BevanFont/blob/main/fonts/ttf/Bevan-Regular.ttf?raw=true'
 fprop = FontManager(URL).prop
     
+player_id = 431791
+player_name = 'Cameron Puertas'
     
-    ##############################################################################################
-    ##############################################################################################
-    ##############################################################################################
-df_base = df_base[df_base['period/displayName']!='PenaltyShootout'].reset_index(drop=True)
-
-type_cols = [col for col in df_base.columns if '/type/displayName' in col]
-
-df_base['endX'] = 0.0
-df_base['endY'] = 0.0
-for i in range(len(df_base)):
-        df1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df1[type_cols[j]].values[0]
-            if col == 'PassEndX':
-                endx = df1.loc[:,'qualifiers/%i/value' %j].values[0]
-                df_base['endX'][i] = float(endx)
-            else:
-                j +=1
-        k = 0
-        for k in range(len(type_cols)):
-            col = df1[type_cols[k]].values[0]
-            if col == 'PassEndY':
-                endy = df1.loc[:,'qualifiers/%i/value' %k].values[0]
-                df_base['endY'][i] = float(endy)
-            else:
-                k +=1
-
-df_base['Cross'] = 0
-for i in range(len(df_base)):
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col == 'Cross':
-                df_base['Cross'][i] = 1
-            else:
-                j +=1
-
-df_base['Corner'] = 0
-for i in range(len(df_base)):
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col == 'CornerTaken':
-                df_base['Corner'][i] = 1
-            else:
-                j +=1
-
-df_base['KeyPass'] = 0
-for i in range(len(df_base)):
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col == 'KeyPass':
-                df_base['KeyPass'][i] = 1
-            else:
-                j +=1
-
-df_base['ShotAssist'] = 0
-for i in range(len(df_base)):
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col == 'ShotAssist':
-                df_base['ShotAssist'][i] = 1
-            else:
-                j +=1
-
-df_base['FK'] = 0
-for i in range(len(df_base)):
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col == 'FreeKickTaken':
-                df_base['FK'][i] = 1
-            else:
-                j +=1
-df_base['IFK'] = 0
-for i in range(len(df_base)):
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col == 'IndirectFreeKickTaken':
-                df_base['IFK'][i] = 1
-            else:
-                j +=1
-df_base['GK'] = 0
-for i in range(len(df_base)):
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col == 'GoalKick':
-                df_base['GK'][i] = 1
-            else:
-                j +=1
-df_base['ThrowIn'] = 0
-for i in range(len(df_base)):
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col == 'ThrowIn':
-                df_base['ThrowIn'][i] = 1
-            else:
-                j +=1
-
-df_base['GoalMouthY'] = 0.0
-df_base['GoalMouthZ'] = 0.0
-for i in range(len(df_base)):            
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col == 'GoalMouthY':
-                mouthy = df_base1.loc[:,'qualifiers/%i/value' %j].values[0]
-                df_base['GoalMouthY'][i] = mouthy
-            else:
-                j +=1
-        k = 0
-        for k in range(len(type_cols)):
-            col = df_base1[type_cols[k]].values[0]
-            if col == 'GoalMouthZ':
-                mouthz = df_base1.loc[:,'qualifiers/%i/value' %k].values[0]
-                df_base['GoalMouthZ'][i] = mouthz
-            else:
-                k +=1
-"""
-try:            
-        for i in range(len(df_base)):
-            tid = df_base.teamId[i]
-            if df_base.isOwnGoal[i] == True:
-                if tid == teamId_h:
-                    df_base.teamId[i] = teamId_a
-                    df_base.x[i] = 100-df_base.x[i]
-                    df_base.y[i] = 100-df_base.y[i]
-                elif tid == teamId_a:
-                    df_base.teamId[i] = teamId_h
-except:
-        pass
-
-    #####################
-
-df_base['RedCard'] = 0
-for i in range(len(df_base)):
-        df_base1 = df_base.iloc[i:i+1,:]
-        j = 0
-        for j in range(len(type_cols)):
-            col = df_base1[type_cols[j]].values[0]
-            if col in ['SecondYellow','Red']:
-                df_base['RedCard'][i] = 1
-            else:
-                j +=1
-"""
-                
-################################################################################
-#                               Passing heat map setup                         #
-################################################################################
-                
-     
-                
-df = df_base.copy()
-df = df[(df['Corner']==0) & (df['FK']==0) & (df['IFK']==0) & (df['GK']==0) & (df['ThrowIn']==0)]
-df = df[(df['type/displayName']=='Pass') & (df['outcomeType/value']==1)]
-
-xT = pd.read_csv('https://raw.githubusercontent.com/mckayjohns/youtube-videos/main/data/xT_Grid.csv', header=None)
-xT = np.array(xT)
-xT_rows, xT_cols = xT.shape
-
-df['x1_bin_xT'] = pd.cut(df['x'], bins=xT_cols, labels=False)
-df['y1_bin_xT'] = pd.cut(df['y'], bins=xT_rows, labels=False)
-df['x2_bin_xT'] = pd.cut(df['endX'], bins=xT_cols, labels=False)
-df['y2_bin_xT'] = pd.cut(df['endY'], bins=xT_rows, labels=False)
-
-df['start_zone_value_xT'] = df[['x1_bin_xT', 'y1_bin_xT']].apply(lambda x: xT[x[1]][x[0]], axis=1)
-df['end_zone_value_xT'] = df[['x2_bin_xT', 'y2_bin_xT']].apply(lambda x: xT[x[1]][x[0]], axis=1)
-
-df['xT'] = df['end_zone_value_xT'] - df['start_zone_value_xT']
-
-colors = np.arctan2(df['xT'],[.01]*len(df))
-
-norm = Normalize()
-norm.autoscale(colors)
 
 ################################################################################
-#                               Passing heat map creation                      #
+# Pass map
 ################################################################################
 
-pitch = Pitch(pitch_type='opta', pitch_color='#F7FFFF', line_color='#4A2E19', line_zorder=5, half=False)     
+# Initialize the pitch
+pitch = Pitch(pitch_type='opta', pitch_color='#F7FFFF', line_color='#4A2E19')
+
+# Create a figure and axis
+fig, ax = pitch.draw(figsize=(10, 7))
+
+# Plot the player's participation for 'Passes'
+player_id = 431791
+player_name = 'Cameron Puertas'
+player_data = df_base[(df_base['playerId'] == player_id) & (df_base['type/displayName'] == 'Pass')]
+
+#
+# Separate successful and unsuccessful passes
+successful_passes = player_data[player_data['outcomeType/displayName'] != 'Unsuccessful']
+unsuccessful_passes = player_data[player_data['outcomeType/displayName'] == 'Unsuccessful']
+
+# Plot start points of the passes
+pitch.scatter(successful_passes['x'], successful_passes['y'], s=100, c='#1A78CF', edgecolors='#1A78CF', linewidth=1, alpha=0.7, ax=ax, label='Successful Passes')
+pitch.scatter(unsuccessful_passes['x'], unsuccessful_passes['y'], s=100, c='#FF4500', edgecolors='#FF4500', linewidth=1, alpha=0.7, ax=ax, label='Unsuccessful Passes')
+
+# Plot arrows for successful passes
+pitch.arrows(successful_passes['x'], successful_passes['y'], successful_passes['endX'], successful_passes['endY'],
+             color='#1A78CF', ax=ax, headwidth=5, headlength=5, headaxislength=5, width=3, alpha=0.7)
+
+# Plot arrows for unsuccessful passes
+pitch.arrows(unsuccessful_passes['x'], unsuccessful_passes['y'], unsuccessful_passes['endX'], unsuccessful_passes['endY'],
+             color='#FF4500', ax=ax, headwidth=5, headlength=5, headaxislength=5, width=3, alpha=0.7)
+
+title_font = {'family': 'serif', 'fontname': 'Charter', 'fontsize': 30}
+label_font = {'family': 'serif', 'fontname': 'Charter', 'fontsize': 20}
+
+ax.set_title(f"{player_name} - Passes", fontdict=title_font)
+ax.set_xlabel('Direction ---->', fontdict=label_font)
+
+# Add legend
+ax.legend(loc='lower right', bbox_to_anchor=(1, -0.1))
+
+plt.savefig(f"/Users/Mao/Downloads/{player_name}_Passes.png")
+
+# Show the plot
+plt.show()
+
+################################################################################
+# Heatmap 
+################################################################################
+
+pitch = Pitch(pitch_type='opta', pitch_color='#F7FFFF', line_color='#4A2E19', line_zorder=2)
+player_data = df_base[(df_base['playerId'] == player_id)]
+
+# Create a figure and axis
+fig, ax = pitch.draw(figsize=(10, 7))
+
+# Define the bins for the heatmap
 bins = (36, 19)
 
-maxstat = pitch.bin_statistic(df.x, df.y,
-                                 df.xT, statistic='sum', bins=bins,)
-maxstatend = pitch.bin_statistic(df.endX, df.endY,
-                                    df.xT, statistic='sum', bins=bins,)
+# Create the heatmap data
+heatmap_data = pitch.bin_statistic(player_data['x'], player_data['y'], bins=bins, statistic='count')
 
-#dfh = df[df['playerId']==teamId_h].reset_index(drop=True)
+# Apply a Gaussian filter to smooth the data
+heatmap_data['statistic'] = gaussian_filter(heatmap_data['statistic'], sigma=2)
 
-pitch = Pitch(pitch_type='opta', pitch_color='#F7FFFF', line_color='#4A2E19', line_zorder=5, half=False)
-fig, ax = pitch.draw(figsize=(6.276, 6.276/2))
-#fig.set_facecolor('#FF4500')
+# Create a colormap ranging from transparent to #FF4500
+from matplotlib.colors import LinearSegmentedColormap
+cmap = LinearSegmentedColormap.from_list('custom_orange', ['#F7FFFF', '#FF4500'])
 
-my_cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ['#F7FFFF', end_color_h])
-# blank_hmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ['#fbf9f4','#fbf9f4'])
+# Plot the heatmap
+pitch.heatmap(heatmap_data, ax=ax, cmap=cmap, edgecolors=None, alpha=0.8)
 
-bins = (36, 19)
-bs_heatmap = pitch.bin_statistic(df[df['playerId']==134493].x, df[df['playerId']==134493].y,
-                                  values=df[df['playerId']==134493].xT, statistic='sum', bins=bins,)
-bs_heatmap['statistic'] = gaussian_filter(bs_heatmap['statistic'], 1)
+# Add title and labels
+ax.set_title(f"{player_name} - Heatmap", fontdict=title_font)
+ax.set_xlabel('Direction ->', fontdict=label_font)
+ax.set_ylabel('')
 
-####################################################
-# EDITING THE VISUALIZATION
+plt.savefig(f"/Users/Mao/Downloads/{player_name}_Heatmap.png")
 
-hm = pitch.heatmap(bs_heatmap, ax=ax, cmap=my_cmap, edgecolor='#F7FFFF', vmin=0, lw=.1,
-                    vmax=np.percentile(maxstat['statistic'],95) #FF4500
-                          )
-"""
-ax.text(50, 102, "" %name_h,
-                          color='#4A2E19',
-                          va='bottom', ha='center',
-                          fontproperties=fprop,
-                          fontsize=22)
+# Show the plot
+plt.show()
 
-ax.text(50,-2, '',
-                          color='#4A2E19',va='top', ha='center',
-                          fontproperties=fprop,fontsize=13)
-"""
+################################################################################
+# Shotmap 
+################################################################################
 
-fig=plt.gcf()
-fig.set_size_inches(6.276,6.276/2) #length, height
-fig.patch.set_facecolor('#F7FFFF')
+pitch = VerticalPitch(pitch_type='opta', pitch_color='#F7FFFF', line_color='#4A2E19')
 
-#fig.savefig(f"Users/Mao/Documents/Offside:onside/code/Home xT By Zone Start.png", dpi = 300)
-plt.clf()
-print(bs_heatmap['statistic'])
+# Create a figure and axis
+fig, ax = plt.subplots(figsize=(7, 10))
+pitch.draw(ax=ax)
+
+shot_data = df_base[(df_base['type/displayName'] == 'MissedShots') | (df_base['type/displayName'] == 'SavedShot') |
+                    (df_base['type/displayName'] == 'Goal') | (df_base['type/displayName'] == 'ShotOnPost')]
+shot_data = shot_data[(shot_data['playerId'] == player_id)]
+
+goal = shot_data[shot_data['type/displayName'] == 'Goal']
+post = shot_data[shot_data['type/displayName'] == 'ShotOnPost']
+saved_shot = shot_data[shot_data['type/displayName'] == 'SavedShot']
+missed_shots = shot_data[(shot_data['type/displayName'] == 'MissedShots')]
+
+# Plot start points of the shots
+pitch.scatter(goal['x'], goal['y'], s=100, c='#1A78CF', edgecolors='#1A78CF', linewidth=1, alpha=0.7, ax=ax, label='Goals')
+pitch.scatter(post['x'], post['y'], s=100, c='#F7FFFF', edgecolors='#1A78CF', linewidth=1, alpha=1, ax=ax, label='Shots off the bar', marker='o')
+pitch.scatter(saved_shot['x'], saved_shot['y'], s=100, c='#FF4500', edgecolors='#FF4500', linewidth=1, alpha=0.7, ax=ax, label='Saved shots')
+pitch.scatter(missed_shots['x'], missed_shots['y'], s=100, c='#F7FFFF', edgecolors='#FF4500', linewidth=1, alpha=1, ax=ax, label='Missed shots', marker='o')
+
+
+# Set the limits to show only the right half of the pitch
+ax.set_xlim(0, 100)
+ax.set_ylim(70, 100)
+
+# Add title and labels with Charter font
+title_font = {'family': 'serif', 'fontname': 'Charter', 'fontsize': 20}
+label_font = {'family': 'serif', 'fontname': 'Charter', 'fontsize': 14}
+
+
+ax.set_title(f"{player_name}\nShot Map", 
+             fontdict=title_font, 
+             loc='left', 
+             pad=20)
+
+# Add legend in the upper right, moved higher
+ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.1), ncol=4)
+
+plt.savefig(f"/Users/Mao/Downloads/{player_name}_Shots.png")
+
+# Show the plot
+plt.show()

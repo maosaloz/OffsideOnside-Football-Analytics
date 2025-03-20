@@ -9,6 +9,7 @@ import matplotlib.colors as mcolors
 import matplotlib.image as mpimg
 import json
 import os
+import re
 import time
 import warnings
 warnings.filterwarnings("ignore")
@@ -27,7 +28,7 @@ player_name = 'Thiago Almada' # adapth
 player_data = pd.DataFrame()
 
 data_download_loc = '/Users/Mao/Downloads' # adapt
-chrome_driver_loc = '/Users/Mao/Downloads/chromedriver-mac-arm64/chromedriver' # adapt
+chrome_driver_loc = '/Users/Mao/Downloads/chromedriver-mac-arm64 2/chromedriver' 
 
 ###########################################################################
 # Atlanta United 2-1 Toronto
@@ -57,6 +58,13 @@ start_team_data = t.find("matchCentreData") + len('matchCentreData') + 2
 end_team_data = t[t.find("matchCentreData"):].find('matchCentreEventTypeJson') + start_team_data - 30
 team_data_output = t[start_team_data:end_team_data]
 
+start_playerid = team_data_output.find('"playerIdNameDictionary":') + len('"playerIdNameDictionary":')
+end_playerid = team_data_output.find(',"periodMinuteLimits"')  # Find the end of the dictionary
+player_dict_str = team_data_output[start_playerid:end_playerid]
+
+player_dict = json.loads(player_dict_str)
+player_dict = {int(k): v for k, v in player_dict.items()}
+
 driver.close()
 
 # Process team data
@@ -76,15 +84,26 @@ click_css = 'body > section.csv > p > span.rendered > a.download'
 driver.find_element(by=By.CSS_SELECTOR, value=click_css).click()
 time.sleep(3)
 
-driver.close()
-
 os.chdir(data_download_loc)
 files = sorted(os.listdir(os.getcwd()), key=os.path.getmtime)
-df_base = pd.read_csv(f'{data_download_loc}/{files[-1]}')
+df_base = pd.read_csv(f'{data_download_loc}/{files[-1]}')  
 
-df_base = df_base[(df_base['playerId'] == player_id)]
+df_base["playerId"] = df_base["playerId"].astype('Int64')  # Ensures proper integer type
+df_base["playerName"] = df_base["playerId"].map(player_dict)
 
-player_data = pd.concat([player_data ,df_base])
+ft_score_match = re.search(r'"ftScore":"(.*?)"', team_data_output)
+ft_score = ft_score_match.group(1) if ft_score_match else None
+
+df_base["score"] = ft_score
+
+home_teamid_match = re.search(r'"home":\{"teamId":(\d+)', team_data_output)
+home_teamid = int(home_teamid_match.group(1)) if home_teamid_match else None  # Extract home teamId
+
+df_base["home_teamid"] = home_teamid
+
+#df_base = df_base[(df_base['playerId'] == player_id)]
+
+#player_data = pd.concat([player_data ,df_base])
 
 """
 ###########################################################################
@@ -145,7 +164,7 @@ df_base = pd.read_csv(f'{data_download_loc}/{files[-1]}')
 player_data = df_base[(df_base['playerId'] == player_id)]
 
 player_data = pd.concat([player_data ,df_base])
-"""
+
 ###########################################################################
 # Atlanta United 2-2 Houston
 
@@ -260,7 +279,7 @@ df_base = df_base[(df_base['playerId'] == player_id)]
 player_data = pd.concat([player_data ,df_base])
 
 
-"""
+
 ###########################################################################
 # Inter Miami 1-3 Atlanta United
 
@@ -322,7 +341,7 @@ player_data = pd.concat([player_data ,df_base])
 
 player_data.to_csv(r'/Users/Mao/Documents/Offside:onside/code/Olympics/thiago_almada.csv', index=False)
 
-"""
+
 ###########################################################################
 # Atlanta United 2-3 DC United
 
@@ -437,7 +456,7 @@ player_data = pd.concat([player_data ,df_base])
 player_data.to_csv(r'/Users/Mao/Documents/Offside:onside/code/Olympics/Players to Watch/thiago_almada.csv', index=False) # adapt
 
 
-"""
+
 ###########################################################################
 # Chicago 0-0 Atlanta United
 

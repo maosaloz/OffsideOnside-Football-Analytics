@@ -24,10 +24,11 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from utilities import all_teams, serieA_teams, leagues, create_table, data_download_loc, chrome_driver_loc
 
-urls = []
-data = pd.DataFrame()
 
 for team, team_id in serieA_teams.items():                                      # need to change this
+
+    urls = []
+    data = pd.DataFrame()
     
     league = leagues[team]
     print(f"Team: {team}, League: {league}")
@@ -153,10 +154,12 @@ for team, team_id in serieA_teams.items():                                      
         
     data['team_name'] = data['teamId'].map(team_id_to_name)
     data['opponent_name'] = data['opponentid'].map(team_id_to_name)
+    
+    team = team.replace('-', '_')                                           
         
     data.to_csv(os.path.join(
         data_download_loc,
-        f'temp_data.csv'), index=False)
+        f'{team}_data.csv'), index=False)
     
     create_table(data, 
                  league = f'{league}', 

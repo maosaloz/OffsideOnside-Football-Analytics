@@ -15,7 +15,7 @@ data_download_loc = '/Users/Mao/Downloads'
 chrome_driver_loc = '/Users/Mao/Downloads/chromedriver-mac-arm64 2/chromedriver' 
 
 serieA_teams = {
-    #'juventus': '87',
+    'juventus': '87',
     'inter': '75',
     'ac-milan': '80',
     'napoli': '276',

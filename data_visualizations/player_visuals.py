@@ -17,16 +17,7 @@ import matplotlib.colors as mcolors
 import matplotlib.image as mpimg
 from scipy.ndimage import gaussian_filter
 from mplsoccer import VerticalPitch, FontManager
-
-base_path = '/Users/Mao/Documents/Offside:onside'
-
-logo_path = '/Users/Mao/Downloads/offside_onside_logo.png' # adapt
-logo = mpimg.imread(logo_path)
-
-title_font = {'family': 'serif', 'fontname': 'Charter', 'fontsize': 30}
-label_font = {'family': 'serif', 'fontname': 'Charter', 'fontsize': 20}
-
-
+from utilities import base_path, logo_path, logo, title_font, label_font
 
 
 

@@ -18,6 +18,7 @@ logo = mpimg.imread(logo_path)
 
 title_font = {'family': 'serif', 'fontname': 'Charter', 'fontsize': 30}
 label_font = {'family': 'serif', 'fontname': 'Charter', 'fontsize': 20}
+small_font = {'family': 'serif', 'fontname': 'Charter', 'fontsize': 14}
 
 all_teams = {
     # Serie A

@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Mar 17 18:19:22 2025
-
-@author: Mao
-"""
-
 import pandas as pd
 import psycopg2
 import os
@@ -13,6 +5,54 @@ from sqlalchemy import create_engine
 
 data_download_loc = '/Users/Mao/Downloads'
 chrome_driver_loc = '/Users/Mao/Downloads/chromedriver-mac-arm64 2/chromedriver' 
+
+comps_postgres_t5 = {
+    'Serie A': 'serie_a',
+    'Premier League': 'premier_league',
+    'Ligue 1': 'ligue_1',
+    'La Liga': 'la_liga',
+    'Bundesliga': 'bundesliga'}
+
+comps_next7 = [
+        #'Belgian Pro League',
+        #'Eredivisie',
+        #'Primeira Liga',
+        #'Championship',
+        'Argentine Primera División',
+        'MLS',
+        'Brasileirão'
+        ]
+
+comps_postgres_next7 = {
+    #'Belgian Pro League': 'belgian_pro_league',
+    #'Eredivisie': 'eredivisie',
+    #'Primeira Liga': 'primeira_liga',
+    #'Championship': 'championship',
+    'Argentine Primera División': 'primera_division',
+    'MLS': 'mls',
+    'Brasileirão': 'brasileirao'
+    }
+
+comps_seasons_next7 = {
+    #'Belgian Pro League': '2024-2025',
+    #'Eredivisie': '2024-2025',
+    #'Primeira Liga': '2024-2025',
+    #'Championship': '2024-2025',
+    'Argentine Primera División': '2025',
+    'MLS': '2025',
+    'Brasileirão': '2025'
+    }
+
+
+ssns = [
+        #'2024-2025',
+        #'2024-2025',
+        #'2024-2025',
+        #'2024-2025',
+        '2025',
+        '2025',
+        '2025'
+        ]
 
 serieA_teams = {
     'juventus': '87',
@@ -203,15 +243,15 @@ all_teams = {
     
     }
 
-leagues = {'juventus': 'serie_a',
-           'inter': 'serie_a',
-           'ac-milan': 'serie_a',
-           'napoli': 'serie_a',
-           'roma': 'serie_a',
-           'atalanta': 'serie_a',
-           'lazio': 'serie_a',
-           'fiorentina': 'serie_a',
-           'bologna': 'serie_a',
+leagues = {'juventus': 'ita_serie_a',
+           'inter': 'ita_serie_a',
+           'ac-milan': 'ita_serie_a',
+           'napoli': 'ita_serie_a',
+           'roma': 'ita_serie_a',
+           'atalanta': 'ita_serie_a',
+           'lazio': 'ita_serie_a',
+           'fiorentina': 'ita_serie_a',
+           'bologna': 'ita_serie_a',
            'barcelona': 'la_liga',
            'real-madrid': 'la_liga',
            'atletico-madrid': 'la_liga',
@@ -258,7 +298,7 @@ leagues = {'juventus': 'serie_a',
            }
 
 
-def create_table(data, league, team):
+def create_table_whoscored(data, league, team):
 
     data.rename(columns={
         'teamId': 'teamid',
@@ -333,4 +373,36 @@ def create_table(data, league, team):
     engine = create_engine(f"postgresql://postgres:Chachagui1@@localhost:5432/{league}")
     data.to_sql(f"{team}", schema="whoscored", con=engine, if_exists="replace", index=False)
 
+    
+def create_table_fbref_outfield(data, comp, season, postgres, date):
+    
+    data.rename(columns={
+        'Main Poistion': 'Main_Postion'}, inplace=True)
+    
+    conn = psycopg2.connect(host='localhost',
+                            dbname=f'{postgres}',
+                            user='postgres',
+                            password="Chachagui1@",
+                            port=5432)
+    
+    if '-' in season:
+        season = season.split('-', 1)[1]
+    
+    engine = create_engine(f"postgresql://postgres:Chachagui1@@localhost:5432/{postgres}")
+    data.to_sql(f"outfield_{season}_{date}", schema="fbref", con=engine, if_exists="replace", index=False)
+    
 
+def create_table_fbref_goalkeeper(data, season, postgres, date):
+    
+    
+    conn = psycopg2.connect(host='localhost',
+                            dbname=f'{postgres}',
+                            user='postgres',
+                            password="Chachagui1@",
+                            port=5432)
+    
+    if '-' in season:
+        season = season.split('-', 1)[1]
+    
+    engine = create_engine(f"postgresql://postgres:Chachagui1@@localhost:5432/{postgres}")
+    data.to_sql(f"goalkeeper_{season}_{date}", schema="fbref", con=engine, if_exists="replace", index=False)

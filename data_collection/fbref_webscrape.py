@@ -15,6 +15,11 @@ import time
 from scipy import stats
 from statistics import mean
 from math import pi
+from utilities import comps_postgres_t5, comps_next7, comps_postgres_next7, comps_seasons_next7, ssns, create_table_fbref_goalkeeper, create_table_fbref_outfield
+
+root = '/Users/Mao/Documents/GitHub/OffsideOnside-Football-Analytics/'
+season = '2024-2025'
+date_today = '25723'
 
 def scrape_fbref_t5_leagues_players(season):
     # File names to change if needed
@@ -22,9 +27,6 @@ def scrape_fbref_t5_leagues_players(season):
     raw_gk = f'Raw FBRef GK {season}'
     final_nongk = f'Final FBRef {season}'
     final_gk = f'Final FBRef GK {season}'
-
-    # this is the file path root, i.e. where this file is located
-    root = str(Path(os.getcwd()).parents[0]).replace('\\','/')+'/'
 
     # This section creates the programs that gather data from FBRef.com... Data is from FBRef and Opta
     def _get_table(soup):
@@ -137,48 +139,58 @@ def scrape_fbref_t5_leagues_players(season):
     df_poss = df_poss.reset_index(drop=True)
     df_misc = df_misc.reset_index(drop=True)
 
-    # Now the fun part... merging all raw tables into one.
-    # Change any column name you want to change:
-    # Example --   'Gls': 'Goals'  changes column "Gls" to be named "Goals", etc.
-    ## Note that I inclide all columns but don't always change the names... this is useful to me when I need to update the columns, like when FBRef witched to Opta data haha. I got lucky as this made it easier on me!
-
     df = df_standard.iloc[:, 0:10]
     df = df.join(df_standard.iloc[:, 13])
-    df = df.join(df_standard.iloc[:, 26])
-    df = df.rename(columns={'G-PK': 'npGoals', 'Gls':'Glsxx'})
+    #df = df.join(df_standard.iloc[:, 26])
+    df.columns = df.columns.str.lower()
+    df = df.rename(columns={'pos': 'position', 'squad':'club', 'born':'year', 'mp': 'matches', 'min': 'minutes', 'g+a':'g_a'})
+
     df = df.join(df_shooting.iloc[:,8:25])
-    df = df.rename(columns={'Gls': 'Goals', 'Sh': 'Shots', 'SoT': 'SoT', 'SoT%': 'SoT%', 'Sh/90': 'Sh/90', 'SoT/90': 'SoT/90', 'G/Sh': 'G/Sh', 'G/SoT': 'G/SoT', 'Dist': 'AvgShotDistance', 'FK': 'FKShots', 'PK': 'PK', 'PKatt': 'PKsAtt', 'xG': 'xG', 'npxG': 'npxG', 'npxG/Sh': 'npxG/Sh', 'G-xG': 'G-xG', 'np:G-xG': 'npG-xG'})
+    df = df.rename(columns={'Gls':'goals', 'Sh': 'shots', 'SoT': 'shots_t', 'SoT%': 'per_shots_t', 'Sh/90': 'shots_90', 'SoT/90': 'shots_t_90', 'G/Sh': 'g_shots', 'G/SoT': 'g_shots_t', 'Dist': 'avg_shot_dist', 'FK': 'fk_shots', 'PK':'pk', 'PKatt': 'pk_att', 'npxG/Sh': 'npxg_shots', 'G-xG': 'g_minus_xg', 'np:G-xG': 'npg_minus_npxg'})
 
     df = df.join(df_passing.iloc[:,8:13])
-    df = df.rename(columns={'Cmp': 'PassesCompleted', 'Att': 'PassesAttempted', 'Cmp%': 'TotCmp%', 'TotDist': 'TotalPassDist', 'PrgDist': 'ProgPassDist', })
+    df = df.rename(columns={'Cmp': 'pass_cmp', 'Att': 'pass_att', 'Cmp%': 'per_pass_cmp', 'TotDist': 'total_pass_dist', 'PrgDist': 'prog_pass_dist', })
     df = df.join(df_passing.iloc[:,13:16])
-    df = df.rename(columns={'Cmp': 'ShortPassCmp', 'Att': 'ShortPassAtt', 'Cmp%': 'ShortPassCmp%', })
+    df = df.rename(columns={'Cmp': 'short_pass_cmp', 'Att': 'short_pass_att', 'Cmp%': 'per_short_pass_cmp'})
     df = df.join(df_passing.iloc[:,16:19])
-    df = df.rename(columns={'Cmp': 'MedPassCmp', 'Att': 'MedPassAtt', 'Cmp%': 'MedPassCmp%', })
+    df = df.rename(columns={'Cmp': 'med_pass_cmp', 'Att': 'med_pass_att', 'Cmp%': 'per_med_pass_cmp'})
     df = df.join(df_passing.iloc[:,19:22])
-    df = df.rename(columns={'Cmp': 'LongPassCmp', 'Att': 'LongPassAtt', 'Cmp%': 'LongPassCmp%', })
+    df = df.rename(columns={'Cmp': 'long_pass_cmp', 'Att': 'long_pass_att', 'Cmp%': 'per_long_pass_cmp', })
     df = df.join(df_passing.iloc[:,22:31])
-    df = df.rename(columns={'Ast': 'Assists', 'xAG':'xAG', 'xA': 'xA', 'A-xAG': 'A-xAG', 'KP': 'KeyPasses', '1/3': 'Final1/3Cmp', 'PPA': 'PenAreaCmp', 'CrsPA': 'CrsPenAreaCmp', 'PrgP': 'ProgPasses', })
+    df = df.rename(columns={'Ast': 'assists', 'xAG':'xag', 'xA': 'xa', 'A-xAG':'a_minus_xag', 'KP': 'key_passes', '1/3': 'final_third_cmp', 'PPA': 'pen_area_cmp', 'CrsPA': 'crs_pen_area_cmp', 'PrgP': 'prg_p', })
 
     df = df.join(df_pass_types.iloc[:, 9:23])
-    df = df.rename(columns={'Live': 'LivePass', 'Dead': 'DeadPass', 'FK': 'FKPasses', 'TB': 'ThruBalls', 'Sw': 'Switches', 'Crs': 'Crs', 'CK': 'CK', 'In': 'InSwingCK', 'Out': 'OutSwingCK', 'Str': 'StrCK', 'TI': 'ThrowIn', 'Off': 'PassesToOff', 'Blocks':'PassesBlocked', 'Cmp':'Cmpxxx'})
+    df = df.rename(columns={'Live': 'live_pass', 'Dead': 'dead_pass', 'FK': 'fk_passes', 'TB': 'thru_balls', 'Sw': 'switches', 'Crs': 'crosses', 'CK': 'ck', 'In': 'inswing_ck', 'Out': 'outswing_ck', 'Str': 'straight_ck', 'TI': 'throw_ins', 'Off': 'passes_to_off', 'Blocks':'passes_blocked', 'Cmp':'cmpxxx'})
 
-    df = df.join(df_gsca.iloc[:, 8:16].rename(columns={'SCA': 'SCA', 'SCA90': 'SCA90', 'PassLive': 'SCAPassLive', 'PassDead': 'SCAPassDead', 'TO': 'SCADrib', 'Sh': 'SCASh', 'Fld': 'SCAFld', 'Def': 'SCADef'}))
-    df = df.join(df_gsca.iloc[:, 16:24].rename(columns={'GCA': 'GCA', 'GCA90': 'GCA90', 'PassLive': 'GCAPassLive', 'PassDead': 'GCAPassDead', 'TO': 'GCADrib', 'Sh': 'GCASh', 'Fld': 'GCAFld', 'Def': 'GCADef'}))
+    df = df.join(df_gsca.iloc[:, 8:16].rename(columns={'SCA': 'sc_actions', 'SCA90': 'sc_actions_90', 'PassLive': 'sca_live_pass', 'PassDead': 'sca_dead_pass', 'TO': 'sca_take_on', 'Sh': 'sca_shot', 'Fld': 'sca_fouls', 'Def': 'sca_def_actions'}))
+    df = df.join(df_gsca.iloc[:, 16:24].rename(columns={'GCA': 'gc_actions', 'GCA90': 'gc_actions_90', 'PassLive': 'gca_live_pass', 'PassDead': 'gca_dead_pass', 'TO': 'gca_take_on', 'Sh': 'gca_shot', 'Fld': 'gca_fouls', 'Def': 'gca_def_actions'}))
 
-    df = df.join(df_defense.iloc[:,8:13].rename(columns={'Tkl': 'Tkl', 'TklW': 'TklWinPoss', 'Def 3rd': 'Def3rdTkl', 'Mid 3rd': 'Mid3rdTkl', 'Att 3rd': 'Att3rdTkl'}))
-    df = df.join(df_defense.iloc[:,13:24].rename(columns={'Tkl': 'DrbTkl', 'Att': 'DrbPastAtt', 'Tkl%': 'DrbTkl%', 'Lost': 'DrbPast', 'Blocks': 'Blocks', 'Sh': 'ShBlocks', 'Pass': 'PassBlocks', 'Int': 'Int', 'Tkl+Int': 'Tkl+Int', 'Clr': 'Clr', 'Err': 'Err'}))
+    df = df.join(df_defense.iloc[:,8:13].rename(columns={'Tkl': 'tackles', 'TklW': 'tackles_won', 'Def 3rd': 'tackles_def_third', 'Mid 3rd': 'tackles_mid_third', 'Att 3rd': 'tackles_att_third'}))
+    df = df.join(df_defense.iloc[:,13:24].rename(columns={'Tkl': 'drib_tackles', 'Att': 'drib_attempted', 'Tkl%': 'per_drib_tackled', 'Lost': 'drib_lost', 'Blocks': 'blocks', 'Sh': 'shot_blocks', 'Pass': 'pass_blocks', 'Int': 'interceptions', 'Tkl+Int': 'tackles_interceptions', 'Clr': 'clearances', 'Err': 'shot_errors'}))
 
     df = df.join(df_poss.iloc[:,8:30])
-    df = df.rename(columns={'Touches': 'Touches', 'Def Pen': 'DefPenTouch', 'Def 3rd': 'Def3rdTouch', 'Mid 3rd': 'Mid3rdTouch', 'Att 3rd': 'Att3rdTouch', 'Att Pen': 'AttPenTouch', 'Live': 'LiveTouch', 'Succ': 'SuccDrb', 'Att': 'AttDrb', 'Succ%': 'DrbSucc%', 'Tkld':'TimesTackled', 'Tkld%':'TimesTackled%', 'Carries':'Carries', 'TotDist':'TotalCarryDistance', 'PrgDist':'ProgCarryDistance', 'PrgC':'ProgCarries', '1/3':'CarriesToFinalThird', 'CPA':'CarriesToPenArea', 'Mis': 'CarryMistakes', 'Dis': 'Disposesed', 'Rec': 'ReceivedPass', 'PrgR':'ProgPassesRec'})
+    df = df.rename(columns={'Touches': 'touches', 'Def Pen': 'touches_def_pen', 'Def 3rd': 'touches_def_third', 'Mid 3rd': 'touches_mid_third', 'Att 3rd': 'touches_att_third', 'Att Pen': 'touches_att_pen', 'Live': 'live_touches', 'Succ': 'take_ons_success', 'Att': 'take_ons_attempted', 'Succ%': 'per_take_ons_success', 
+                            'Tkld':'take_ons_tackled', 'Tkld%':'per_take_ons_tackled', 'Carries':'carries', 'TotDist':'dist_carries', 'PrgDist':'prog_dist_carries', 'PrgC':'prog_carries', '1/3':'carries_att_third', 'CPA':'carries_att_pen', 'Mis': 'miscontrols', 'Dis': 'dispossessions', 'Rec': 'pass_rec', 'PrgR':'prog_pass_rec'})
 
     df = df.join(df_misc.iloc[:, 8:14])
-    df = df.rename(columns={'CrdY': 'Yellows', 'CrdR': 'Reds', '2CrdY': 'Yellow2', 'Fls': 'Fls', 'Fld': 'Fld', 'Off': 'Off', })
+    # yellows: number of yellow cards collected 
+    # reds: number of red cards collected 
+    # second_yellow: number of second yellow cards collected in a match
+    # fouls_committed: number of fouls committed by player
+    # fouls_drawn: number of fouls drawn by player
+    # offsides: number of time caught offsides
+    df = df.rename(columns={'CrdY': 'yellows', 'CrdR': 'reds', '2CrdY': 'second_yellow', 'Fls': 'fouls_committed', 'Fld': 'fouls_drawn', 'Off': 'Off', })
     df = df.join(df_misc.iloc[:,17:24])
-    df = df.rename(columns={'PKwon': 'PKwon', 'PKcon': 'PKcon', 'OG': 'OG', 'Recov': 'Recov', 'Won': 'AerialWins', 'Lost': 'AerialLoss', 'Won%': 'AerialWin%', })
+    # pk_wins: number of penalty kicks won by player 
+    # pk_drawn: number of penalty kicks conceeded by player
+    # balls_recovered: number of balls recovered
+    # aerial_wins: number of aerial duels won by player
+    # aerial_losses: number of aerial duals lost by player
+    # per_aerial_wins: percentage of aerial duels won
+    df = df.rename(columns={'PKwon': 'pk_wins', 'PKcon': 'pk_drawn', 'Recov': 'balls_recovered', 'Won': 'aerial_wins', 'Lost': 'aerial_losses', 'Won%': 'per_aerial_wins' })
 
     # Make sure to drop all blank rows (FBRef's tables have several)
-    df.dropna(subset = ["Player"], inplace=True)
+    df.dropna(subset = ["player"], inplace=True)
 
     # Turn the minutes columns to integers. So from '1,500' to '1500'. Otherwise it can't do calculations with minutes
     for i in range(0,len(df)):
@@ -206,23 +218,61 @@ def scrape_fbref_t5_leagues_players(season):
     df_advgk = df_advgk.reset_index(drop=True)
 
     ###############################################################################
-
-    df = df_raw_nongk.copy()
-    df = df[df['Pos'].str.contains("GK")].reset_index().iloc[:,1:]
+    
+    
+    df = df[df['position'].str.contains("GK")].reset_index().iloc[:,1:]
     df_gk['Pos'] = df_gk['Pos'].astype(str)
     df_gk = df_gk[df_gk['Pos'].str.contains('GK')]
     df_gk = df_gk.reset_index().iloc[:,1:]
-    df_gk = df_gk.rename(columns={'PKatt':'PKsFaced'})
-
+    df_gk.columns.values[15] = 'Save%.1'
+    df_gk.columns.values[25] = 'Save%.2'
     df = df.join(df_gk.iloc[:, 11:26].astype(float), lsuffix='.1', rsuffix='.2')
-    df = df.rename(columns={'GA': 'GA', 'GA90': 'GA90', 'SoTA': 'SoTA', 'Saves': 'Saves', 'Save%.1': 'Save%', 'W': 'W', 'D': 'D', 'L': 'L', 'CS': 'CS', 'CS%': 'CS%', 'PKsFaced': 'PKsFaced', 'PKA': 'PKA', 'PKsv': 'PKsv', 'PKm': 'PKm', 'Save%.2': 'PKSave%', })
+    # GA: Goals against
+    # GA90: Goals against per 90 minutes 
+    # shots_ota: Shots on target against
+    # Saves: saves 
+    # per_saves: save percentage (i.e. (shots on target against - goals against)/shots on target against)
+    # clean_sheets: clean sheets
+    # per_clean_sheets: percentage of matches that end in clean sheets
+    # pk_faced: number of penalty kicks faced 
+    # pk_allowed: number of penalty kicks scored against goalkeeper
+    # pk_saved: number of penalty kicks saved by goalkeeper
+    # pk_missed: number of penalty kicks missed by opposing player
+    # per_pk_saves: percentage of penalty kicks saved
+    df = df.rename(columns={'Player':'player', 'Nation':'nation', 'Squad': 'club', 'Comp': 'comp', 'Age': 'age', 'Born':'year', 'MP': 'matches', 'Starts': 'starts', 'Min': 'minutes',
+                                  'SoTA':'shots_ota', 'Saves':'saves', 'Save%.1':'per_saves', 'W':'wins', 'D':'draws', 'L':'losses', 'CS':'clean_sheets', 'CS%':'per_clean_sheets', 'PKatt':'pk_faced',
+                                  'PKA': 'pk_allowed', 'PKsv': 'pk_saved', 'PKm':'pk_missed', 'Save%.2':'per_pk_saves'})
 
     df_advgk['Pos'] = df_advgk['Pos'].astype(str)
     df_advgk = df_advgk[df_advgk['Pos'].str.contains('GK')]
     df_advgk = df_advgk.reset_index().iloc[:,1:]
-    df = df.join(df_advgk.iloc[:,9:20].astype(float).rename(columns={'PKA': 'PKGA', 'FK': 'FKGA', 'CK': 'CKGA', 'OG': 'OGA', 'PSxG': 'PSxG', 'PSxG/SoT': 'PSxG/SoT', 'PSxG+/-': 'PSxG+/-', '/90': 'PSxG+/- /90', 'Cmp': 'LaunchCmp', 'Att': 'LaunchAtt', 'Cmp%': 'LaunchPassCmp%'}))
-    df = df.join(df_advgk.iloc[:,20:24].astype(float).rename(columns={'Att': 'PassAtt', 'Thr': 'PassThr', 'Launch%': 'PassesLaunch%', 'AvgLen': 'AvgLenLaunch'}))
-    df = df.join(df_advgk.iloc[:,24:33].astype(float).rename(columns={'Att': 'GoalKicksAtt', 'Launch%': 'GoalKicksLaunch%', 'AvgLen': 'AvgLen', 'Opp': 'OppCrs', 'Stp': 'StpCrs', 'Stp%': 'CrsStp%', '#OPA': '#OPA', '#OPA/90': '#OPA/90', 'AvgDist': 'AvgDistOPA'}))
+    # pk_gc: penalty kick goals conceeded 
+    # fk_gc: freekick goals conceeded
+    # ck_gc: corner kick goals conceeded
+    # og_c: own goals conceeded on goalkeeper
+    # post_shot_xg: expected goals based on how likely the goalkeeper is to save the shot
+    # post_shot_xg_per_shot_t: Post shot expected goals per shot on target (a higher index means shots on target are more difficult to stop and more likely to score)
+    # post_shot_xg_plus_minus: post shot expected goals minus goals allowed (postive numbers indicates an above average ability to stop shot)
+    # post_shot_xg_plus_minus_90: post shot expected goals minus goals allowed per 90 minutes (postive numbers indicates an above average ability to stop shot)
+    # launched_pass_cmp: passes launched further than 40 yards that are completed  
+    # launched_pass_att: passes launched further than 40 yards that are attempted
+    # per_launch_pass_cmp: percentage of launched passes that are completed 
+    df = df.join(df_advgk.iloc[:,9:20].astype(float).rename(columns={'PKA': 'pk_gc', 'FK': 'fk_gc', 'CK': 'ck_gc', 'OG': 'OG_c', 'PSxG': 'post_shot_xg', 'PSxG/SoT': 'post_shot_xg_per_shot_t', 'PSxG+/-': 'post_shot_xg_plus_minus', '/90': 'post_shot_xg_plus_minus_90', 'Cmp': 'launched_pass_cmp', 'Att': 'launched_pass_att', 'Cmp%': 'per_launch_pass_cmp'}))
+    # pass_att: passes attempted not including goalkicks
+    # pass_throw: thrown passes attempted
+    # per_pass_launched: percentage of passes that were launched
+    # avg_launch_len: average length of passes 
+    df = df.join(df_advgk.iloc[:,20:24].astype(float).rename(columns={'Att (GK)': 'pass_att_gk', 'Thr': 'pass_thow', 'Launch%': 'per_pass_launched', 'AvgLen': 'avg_len'}))
+    # gk_att: goalkicks attempted
+    # per_gk_launched: percentage of goalkicks that were launched 
+    # gk_avg_len: average length of goalkicks in yards
+    # opp_crosses: number of crosses faced by goalkeeper 
+    # stop_crosses: crosses stopped by goalkeeper
+    # per_stop_crosses: percentage of crosses stopped 
+    # def_actions_opa: defensive actions outside of penalty area 
+    # def_actions_opa_90: defensive actions outside of penalty area per 90 minutes 
+    # avg_dist_def_actions: average distance away from goal (in yards) of all defensive actions
+    df = df.join(df_advgk.iloc[:,24:33].astype(float).rename(columns={'Att': 'gk_att', 'Launch%': 'per_gk_launched', 'AvgLen': 'gk_avg_len', 'Opp': 'opp_crosses', 'Stp': 'stop_crosses', 'Stp%': 'per_stop_crosses', '#OPA': 'def_actions_opa', '#OPA/90': 'def_actions_opa_90', 'AvgDist': 'avg_dist_def_actions'}))
 
     df_raw_gk = df.copy()
 
@@ -232,15 +282,22 @@ def scrape_fbref_t5_leagues_players(season):
 
     df = df_raw_nongk.copy()
     df_90s = df_raw_nongk.copy()
-    df_90s['90s'] = df_90s['Min']/90
-    for i in range(10,125):
+    df_90s['minutes'] = pd.to_numeric(df_90s['minutes'], errors='coerce').astype('float')
+    df_90s['90s'] = df_90s['minutes']/90
+    cols = df_90s.columns.tolist()
+    minutes_idx = cols.index('minutes')
+    cols.remove('90s')
+    cols.insert(minutes_idx + 1, '90s')
+    df_90s = df_90s[cols]
+    for i in range(11,125):
         df_90s.iloc[:,i] = df_90s.iloc[:,i]/df_90s['90s']
-    df_90s = df_90s.iloc[:,10:].add_suffix('Per90')
+    
+    df_90s = df_90s.iloc[:,11:].add_suffix('Per90')
     df_new = df.join(df_90s)
 
     try:
         for i in range(len(df_new)):
-            df_new['Age'][i] = int(df_new['Age'][i][:2])
+            df_new['age'][i] = int(df_new['age'][i][:2])
     except:
         pass
 
@@ -253,20 +310,26 @@ def scrape_fbref_t5_leagues_players(season):
 
     df = df_raw_gk.copy()
     df_90s = df_raw_gk.copy()
-    df_90s['90s'] = df_90s['Min']/90
-    for i in range(10,164):
+    df_90s['minutes'] = pd.to_numeric(df_90s['minutes'], errors='coerce').astype('float')
+    df_90s['90s'] = df_90s['minutes']/90
+    cols = df_90s.columns.tolist()
+    minutes_idx = cols.index('minutes')
+    cols.remove('90s')
+    cols.insert(minutes_idx + 1, '90s')
+    df_90s = df_90s[cols]
+    for i in range(11,164):
         df_90s.iloc[:,i] = df_90s.iloc[:,i]/df_90s['90s']
-    df_90s = df_90s.iloc[:,10:].add_suffix('Per90')
+    df_90s = df_90s.iloc[:,11:].add_suffix('Per90')
     df_new = df.join(df_90s)
 
     try:
         for i in range(len(df_new)):
-            df_new['Age'][i] = int(df_new['Age'][i][:2])
+            df_new['age'][i] = int(df_new['age'][i][:2])
     except:
         pass
 
     df_final_gk = df_new.copy()
-
+    
 
     ##################################################################################
     ################ Download team data, for possession-adjusting ####################
@@ -336,10 +399,10 @@ def scrape_fbref_t5_leagues_players(season):
     df['TeamMins'] = int(1)
     df['TeamTouches90'] = float(0.0)
 
-    player_list = list(df['Player'])
+    player_list = list(df['player'])
 
     for i in range(len(player_list)):
-        team_name = df[df['Player']==player_list[i]]['Squad'].values[0]
+        team_name = df[df['player']==player_list[i]]['club'].values[0]
         team_poss = teams[teams['Squad']==team_name]['Poss'].values[0]
         opp_touch = teams[teams['Squad']==team_name]['Opp Touches'].values[0]
         team_mins = teams[teams['Squad']==team_name]['Team Min'].values[0]
@@ -351,34 +414,32 @@ def scrape_fbref_t5_leagues_players(season):
 
     df.iloc[:,9:] = df.iloc[:,9:].astype(float)
     # All of these are the possession-adjusted columns. A couple touch-adjusted ones at the bottom
-    df['pAdjTkl+IntPer90'] = (df['Tkl+IntPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjClrPer90'] = (df['ClrPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjShBlocksPer90'] = (df['ShBlocksPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjPassBlocksPer90'] = (df['PassBlocksPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjIntPer90'] = (df['IntPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjDrbTklPer90'] = (df['DrbTklPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjTklWinPossPer90'] = (df['DrbTklPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjDrbPastPer90'] = (df['DrbPastPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjAerialWinsPer90'] = (df['AerialWinsPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjAerialLossPer90'] = (df['AerialLossPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjDrbPastAttPer90'] = (df['DrbPastAttPer90']/(100-df['AvgTeamPoss']))*50
-    df['TouchCentrality'] = (df['TouchesPer90']/df['TeamTouches90'])*100
-    # df['pAdj#OPAPer90'] =(df['#OPAPer90']/(100-df['AvgTeamPoss']))*50
-    df['Tkl+IntPer600OppTouch'] = df['Tkl+Int'] /(df['OppTouches']*(df['Min']/df['TeamMins']))*600
-    df['pAdjTouchesPer90'] = (df['TouchesPer90']/(df['AvgTeamPoss']))*50
-    df['CarriesPer50Touches'] = df['Carries'] / df['Touches'] * 50
-    df['ProgCarriesPer50Touches'] = df['ProgCarries'] / df['Touches'] * 50
-    df['ProgPassesPer50CmpPasses'] = df['ProgPasses'] / df['PassesCompleted'] * 50
-
+    df['pAdj_tackles_interceptionsPer90'] = (df['tackles_interceptionsPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_clearancesPer90'] = (df['clearancesPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_shot_blocksPer90'] = (df['shot_blocksPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_pass_blocksPer90'] = (df['pass_blocksPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_interceptionsPer90'] = (df['interceptionsPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_drib_tacklesPer90'] = (df['drib_tacklesPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_drib_lostPer90'] = (df['drib_lostPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_aerial_winsPer90'] = (df['aerial_winsPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_aerial_lossesPer90'] = (df['aerial_lossesPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_drib_attemptedPer90'] = (df['drib_attemptedPer90']/(100-df['AvgTeamPoss']))*50
+    df['touch_centrality'] = (df['touchesPer90']/df['TeamTouches90'])*100
+    df['tackles_interceptionsPer600OppTouch'] = df['tackles_interceptions'] /(df['OppTouches']*(df['minutes']/df['TeamMins']))*600
+    df['pAdj_touchesPer90'] = (df['touchesPer90']/(df['AvgTeamPoss']))*50
+    df['carriesPer50Touches'] = df['carries'] / df['touches'] * 50
+    df['prog_carriesPer50Touches'] = df['prog_carries'] / df['touches'] * 50
+    df['prog_passesPer50CmpPasses'] = df['prg_p'] / df['pass_cmp'] * 50
 
     # Now we'll add the players' actual positions, from @jaseziv, into the file
     tm_pos = pd.read_csv('https://github.com/griffisben/Soccer-Analyses/blob/main/TransfermarktPositions-Jase_Ziv83.csv?raw=true')
-    df = pd.merge(df, tm_pos, on ='Player', how ='left')
+    tm_pos.rename(columns={'Player': 'player'}, inplace=True)
+    df = pd.merge(df, tm_pos, on ='player', how ='left')
 
     for i in range(len(df)):
-        if df.Pos[i] == 'GK':
+        if df.position[i] == 'GK':
             df['Main Position'][i] = 'Goalkeeper'
-    df.to_csv("%s%s.csv" %(root, final_nongk), index=False, encoding='utf-8-sig')
+    df.to_csv(os.path.join(root, f'Final FBRef {season}.csv'))
 
 
     ##################################################################################
@@ -393,10 +454,10 @@ def scrape_fbref_t5_leagues_players(season):
     df['TeamMins'] = float(0.0)
     df['TeamTouches90'] = float(0.0)
 
-    player_list = list(df['Player'])
+    player_list = list(df['player'])
 
     for i in range(len(player_list)):
-        team_name = df[df['Player']==player_list[i]]['Squad'].values[0]
+        team_name = df[df['player']==player_list[i]]['club'].values[0]
         team_poss = teams[teams['Squad']==team_name]['Poss'].values[0]
         opp_touch = teams[teams['Squad']==team_name]['Opp Touches'].values[0]
         team_mins = teams[teams['Squad']==team_name]['Team Min'].values[0]
@@ -408,35 +469,84 @@ def scrape_fbref_t5_leagues_players(season):
 
     df.iloc[:,9:] = df.iloc[:,9:].astype(float)
     # Same thing, makes pAdj stats for the GK file
-    df['pAdjTkl+IntPer90'] = (df['Tkl+IntPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjClrPer90'] = (df['ClrPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjShBlocksPer90'] = (df['ShBlocksPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjPassBlocksPer90'] = (df['PassBlocksPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjIntPer90'] = (df['IntPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjDrbTklPer90'] = (df['DrbTklPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjTklWinPossPer90'] = (df['DrbTklPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjDrbPastPer90'] = (df['DrbPastPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjAerialWinsPer90'] = (df['AerialWinsPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjAerialLossPer90'] = (df['AerialLossPer90']/(100-df['AvgTeamPoss']))*50
-    df['pAdjDrbPastAttPer90'] = (df['DrbPastAttPer90']/(100-df['AvgTeamPoss']))*50
-    df['TouchCentrality'] = (df['TouchesPer90']/df['TeamTouches90'])*100
-    df['pAdj#OPAPer90'] =(df['#OPAPer90']/(100-df['AvgTeamPoss']))*50
-    df['Tkl+IntPer600OppTouch'] = df['Tkl+Int'] /(df['OppTouches']*(df['Min']/df['TeamMins']))*600
-    df['pAdjTouchesPer90'] = (df['TouchesPer90']/(df['AvgTeamPoss']))*50
-    df['CarriesPer50Touches'] = df['Carries'] / df['Touches'] * 50
-    df['ProgCarriesPer50Touches'] = df['ProgCarries'] / df['Touches'] * 50
-    df['ProgPassesPer50CmpPasses'] = df['ProgPasses'] / df['PassesCompleted'] * 50
+    df['pAdj_tackles_interceptionsPer90'] = (df['tackles_interceptionsPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_clearancesPer90'] = (df['clearancesPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_shot_blocksPer90'] = (df['shot_blocksPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_pass_blocksPer90'] = (df['pass_blocksPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_interceptionsPer90'] = (df['interceptionsPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_drib_tacklesPer90'] = (df['drib_tacklesPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_drib_lostPer90'] = (df['drib_lostPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_aerial_winsPer90'] = (df['aerial_winsPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_aerial_lossesPer90'] = (df['aerial_lossesPer90']/(100-df['AvgTeamPoss']))*50
+    df['pAdj_drib_attemptedPer90'] = (df['drib_attemptedPer90']/(100-df['AvgTeamPoss']))*50
+    df['touch_centrality'] = (df['touchesPer90']/df['TeamTouches90'])*100
+    df['tackles_interceptionsPer600OppTouch'] = df['tackles_interceptions'] /(df['OppTouches']*(df['minutes']/df['TeamMins']))*600
+    df['pAdj_touchesPer90'] = (df['touchesPer90']/(df['AvgTeamPoss']))*50
+    df['carriesPer50Touches'] = df['carries'] / df['touches'] * 50
+    df['prog_carriesPer50Touches'] = df['prog_carries'] / df['touches'] * 50
+    df['prog_passesPer50CmpPasses'] = df['prg_p'] / df['pass_cmp'] * 50
 
 
     # Just adding the main positions to the GK too, but of course, they will all be GK lol. Keeps other program variables clean
     tm_pos = pd.read_csv('https://github.com/griffisben/Soccer-Analyses/blob/main/TransfermarktPositions-Jase_Ziv83.csv?raw=true')
-    df = pd.merge(df, tm_pos, on ='Player', how ='left')
+    tm_pos.rename(columns={'Player': 'player'}, inplace=True)
+    df = pd.merge(df, tm_pos, on ='player', how ='left')
 
     for i in range(len(df)):
-        if df.Pos[i] == 'GK':
+        if df.position[i] == 'GK':
             df['Main Position'][i] = 'Goalkeeper'
-    df.to_csv("%s%s.csv" %(root, final_gk), index=False, encoding='utf-8-sig')
+    df.to_csv(os.path.join(root, f'Final FBRef GK {season}.csv'))
     print(f'Done :) Files are located at  %s/Final FBRef {season}.csv' %root)
+
+scrape_fbref_t5_leagues_players(season=season)
+
+for comp, postgres in comps_postgres_t5.items():
+    
+    data = pd.read_csv(os.path.join(
+        root,
+        f"Final FBRef {season}.csv"))
+    
+    data['comp'] = data['comp'].str.split(' ', 1).str[1]
+    data = data[data['comp']==comp]
+    
+    data = data.loc[:, ~data.columns.duplicated()]
+    
+    create_table_fbref_outfield(data=data, comp=comp, season=season, postgres=postgres, date=date_today)
+    
+    data = pd.read_csv(os.path.join(
+        root,
+        f"Final FBRef GK {season}.csv"))
+    
+    data['comp'] = data['comp'].str.split(' ', 1).str[1]
+    
+    data = data.loc[:, ~data.columns.duplicated()]
+    data = data[data['comp']==comp]
+    
+    data.drop(columns=['position', 'goals', 'assists', 'g_a', 'pk', 'pk_att',  'prg_p', 'shots_90', 
+                       'shots', 'shots_t', 'per_shots_t', 'shots_t_90', 'g_shots', 'g_shots_t', 'fk_shots',
+                       'xG', 'npxG', 'npxg_shots', 'g_minus_xg', 'npg_minus_npxg', 'xag', 'a_minus_xag', 'thru_balls',
+                       'throw_ins', 'ck', 'inswing_ck', 'outswing_ck', 'straight_ck', 'sca_take_on', 'sca_shot', 'sca_fouls',
+                       'sca_def_actions', 'gc_actions', 'gc_actions_90', 'gca_live_pass', 'gca_dead_pass', 'gca_take_on',
+                       'gca_shot', 'gca_fouls', 'gca_def_actions', 'tackles_won', 'tackles_def_third', 'tackles_mid_third',
+                       'tackles_att_third', 'drib_tackles', 'drib_attempted', 'per_drib_tackled', 'drib_lost', 'blocks',
+                       'shot_blocks', 'pass_blocks', 'interceptions', 'tackles_interceptions', 'shot_errors',
+                       'touches_att_third', 'touches_att_pen', 'take_ons_attempted', 'take_ons_success', 'per_take_ons_success',
+                       'take_ons_tackled', 'per_take_ons_tackled', 'prog_carries', 'carries_att_third', 'carries_att_pen',
+                       'prog_pass_rec', 'avg_shot_dist',
+                       'goalsPer90', 'assistsPer90', 'g_aPer90',  'pkPer90', 'pk_attPer90', 'prg_pPer90', 'shots_90Per90',
+                       'shotsPer90', 'shots_tPer90', 'per_shots_tPer90', 'shots_t_90Per90', 'g_shotsPer90', 'g_shots_tPer90', 'fk_shotsPer90',
+                       'xGPer90', 'npxGPer90', 'npxg_shotsPer90', 'g_minus_xgPer90', 'npg_minus_npxgPer90', 'xagPer90', 'a_minus_xagPer90', 'thru_ballsPer90',
+                       'throw_insPer90', 'ckPer90', 'inswing_ckPer90', 'outswing_ckPer90', 'straight_ckPer90', 'sca_take_onPer90', 'sca_shotPer90', 'sca_foulsPer90',
+                       'sca_def_actionsPer90', 'gc_actionsPer90', 'gc_actions_90Per90', 'gca_live_passPer90', 'gca_dead_passPer90', 'gca_take_onPer90',
+                       'gca_shotPer90', 'gca_foulsPer90', 'gca_def_actionsPer90', 'tackles_wonPer90', 'tackles_def_thirdPer90', 'tackles_mid_thirdPer90',
+                       'tackles_att_thirdPer90', 'drib_tacklesPer90', 'drib_attemptedPer90', 'per_drib_tackledPer90', 'drib_lostPer90', 'blocksPer90',
+                       'shot_blocksPer90', 'pass_blocksPer90', 'interceptionsPer90', 'tackles_interceptionsPer90', 'shot_errorsPer90',
+                       'touches_att_thirdPer90', 'touches_att_penPer90', 'take_ons_attemptedPer90', 'take_ons_successPer90', 'per_take_ons_successPer90',
+                       'take_ons_tackledPer90', 'per_take_ons_tackledPer90', 'prog_carriesPer90', 'carries_att_thirdPer90', 'carries_att_penPer90',
+                       'prog_pass_recPer90', 'avg_shot_distPer90'], inplace=True)
+    
+    create_table_fbref_goalkeeper(data=data, season=season, postgres=postgres, date=date_today)
+   
 
 
 def scrape_fbref_next12_leagues_players(comps, seasons):
@@ -554,7 +664,7 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         data.insert(1, 'Comp', [comp]*len(data))
         return data
 
-    for k in range(len(comps)):
+    for k in range(len(comps_next7)):
         season = seasons[k]
         comp = comps[k]
         print('Working on %s' %comp)
@@ -564,9 +674,6 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         final_nongk = 'Final FBRef %s - %s' %(season,comp)
         final_gk = 'Final FBRef GK %s - %s' %(season,comp)
 
-        if comp == 'Liga MX':
-            lg_str = 'Liga-MX'
-            lg_id = 31
         if comp == 'MLS':
             lg_str = 'Major-League-Soccer'
             lg_id = 22
@@ -582,35 +689,15 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         if comp == 'Championship':
             lg_str = 'Championship'
             lg_id = 10
-        if comp == '2. Bundesliga':
-            lg_str = '2-Bundesliga'
-            lg_id = 33
-        if comp == 'Ligue 2':
-            lg_str = 'Ligue 2'
-            lg_id = 60
-        if comp == 'Serie B':
-            lg_str = 'Serie-B'
-            lg_id = 18
-        if comp == 'La Liga 2':
-            lg_str = 'Segunda-Division'
-            lg_id = 17
         if comp == 'Belgian Pro League':
             lg_str = 'Belgian-Pro-League'
             lg_id = 37
         if comp == 'Argentine Primera División':
             lg_str = 'Primera-Division'
             lg_id = 21
-        if comp == 'Copa de la Liga':
-            lg_str = 'Copa-de-la-Liga-Profesional'
-            lg_id = 905
-
-
-        # this is the file path root, i.e. where this file is located
-        root = str(Path(os.getcwd()).parents[0]).replace('\\','/')+'/'
 
 
         # this section gets the raw tables from FBRef.com
-
         standard = "https://fbref.com/en/comps/%i/stats/%s-Stats" %(lg_id, lg_str)
         shooting = "https://fbref.com/en/comps/%i/shooting/%s-Stats" %(lg_id, lg_str)
         passing = "https://fbref.com/en/comps/%i/passing/players/%s-Stats" %(lg_id, lg_str)
@@ -618,7 +705,7 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         gsca = "https://fbref.com/en/comps/%i/gca/players/%s-Stats" %(lg_id, lg_str)
         defense = "https://fbref.com/en/comps/%i/defense/players/%s-Stats" %(lg_id, lg_str)
         poss = "https://fbref.com/en/comps/%i/possession/players/%s-Stats" %(lg_id, lg_str)
-        misc = "https://fbref.com/en/comps/%i/misc/players/%s-Stats" %(lg_id, lg_str)
+        #misc = "https://fbref.com/en/comps/%i/misc/players/%s-Stats" %(lg_id, lg_str)
 
         df_standard = get_players_df(standard)
         df_shooting = get_players_df(shooting)
@@ -627,7 +714,7 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         df_gsca = get_players_df(gsca)
         df_defense = get_players_df(defense)
         df_poss = get_players_df(poss)
-        df_misc = get_players_df(misc)
+        #df_misc = get_players_df(misc)
 
         # this section sorts the raw tables then resets their indexes. Without this step, you will
         # run into issues with players who play minutes for 2 clubs in a season.
@@ -639,7 +726,7 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         df_gsca.sort_values(['Player', 'Squad'], ascending=[True, True], inplace=True)
         df_defense.sort_values(['Player', 'Squad'], ascending=[True, True], inplace=True)
         df_poss.sort_values(['Player', 'Squad'], ascending=[True, True], inplace=True)
-        df_misc.sort_values(['Player', 'Squad'], ascending=[True, True], inplace=True)
+        #df_misc.sort_values(['Player', 'Squad'], ascending=[True, True], inplace=True)
 
         df_standard = df_standard.reset_index(drop=True)
         df_shooting = df_shooting.reset_index(drop=True)
@@ -648,50 +735,190 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         df_gsca = df_gsca.reset_index(drop=True)
         df_defense = df_defense.reset_index(drop=True)
         df_poss = df_poss.reset_index(drop=True)
-        df_misc = df_misc.reset_index(drop=True)
+        #df_misc = df_misc.reset_index(drop=True)
 
-        # Now the fun part... merging all raw tables into one.
-        # Change any column name you want to change:
-        # Example --   'Gls': 'Goals'  changes column "Gls" to be named "Goals", etc.
-        ## Note that I inclide all columns but don't always change the names... this is useful to me when I need to update the columns, like when FBRef witched to Opta data haha. I got lucky as this made it easier on me!
-
-        df = df_standard.iloc[:, 0:10]
-        df = df.join(df_standard.iloc[:, 13])
-        df = df.join(df_standard.iloc[:, 26])
-        df = df.rename(columns={'G-PK': 'npGoals', 'Gls':'Glsxx'})
-        df = df.join(df_shooting.iloc[:,8:25])
-        df = df.rename(columns={'Gls': 'Goals', 'Sh': 'Shots', 'SoT': 'SoT', 'SoT%': 'SoT%', 'Sh/90': 'Sh/90', 'SoT/90': 'SoT/90', 'G/Sh': 'G/Sh', 'G/SoT': 'G/SoT', 'Dist': 'AvgShotDistance', 'FK': 'FKShots', 'PK': 'PK', 'PKatt': 'PKsAtt', 'xG': 'xG', 'npxG': 'npxG', 'npxG/Sh': 'npxG/Sh', 'G-xG': 'G-xG', 'np:G-xG': 'npG-xG'})
-
+        # Merging all the dataframes to df 
+        
+        # df_standard
+        df = df_standard.iloc[:, 0:17]
+        try:
+            df_standard = df_standard.iloc[:, :26]                                      # Removing stats per 90
+            df = df.join(df_standard[['PrgC', 'PrgP', 'PrgR']])
+        except Exception as e:
+            print(f"Stanadard data: PrgC, PrgP, PrgR missing") 
+        # player: Player
+        # nation: nationality of the player 
+        # position: Habitual position of the player
+        # club: Club team that the player plays for 
+        # comp: competition which the players club plays in
+        # age: Age in years and days of each player 
+        # year: The year in which the player was born in  
+        # matches: Number of matches in which the player has played in 
+        # starts: Number of matches for which the player was included in the starting lineup 
+        # minutes: Total minutes the player has played throughout the season 
+        # 90s: number of minutes a player has played in divided by 90 minutes (full matches)
+        # goals: Goals
+        # assists: Assists
+        # g_a: Total goals + assists
+        # np_goals: Total non-penalty goals
+        # pk: Penalty kicks made
+        # pk_att: Penalty kicks attempted
+        # g_a_minus_pk_90: Non penalty goals + assists per 90 minutes
+        # prg_c: Progressive carries (moving the ball closer to the opponents goal line by at least 10-yards, excludes carries which end in the defending 50% of the pitch)
+        # prg_p: Progressive passes (moving the ball closer to the opponents goal line by at least 10-yards, excludes passes passes from the defending 40% of the pitch)
+        # prg_r: Progressive passes received (moving the ball closer to the opponents goal line by at least 10-yards, excludes passes passes from the defending 40% of the pitch)
+        df.rename(columns={'Player': 'player', 'Nation': 'nation', 'Pos': 'position', 'Squad': 'club', 'Comp': 'comp', 'Age': 'age', 'Born': 'year', 'MP': 'matches', 'Starts': 'starts', 'Min': 'minutes', 'G+A': 'g_a', 'PK': 'pk', 'PKatt': 'pk_att', 'G+A-PK': 'g_a_minus_pk_90', 'G-PK': 'np_goals', 'Gls':'goals', 'Ast': 'assists', 'PrgC': 'prg_c', 'PrgP': 'prg_p', 'PrgR': 'prg_r'}, inplace=True)
+        
+        # df_shooting
+        df = df.join(df_shooting.iloc[:,9:16])
+        try:
+            df = df.join(df_shooting[['FK', 'xG', 'npxG', 'npxG/Sh', 'G-xG', 'np:G-xG']])
+        except Exception as e:
+            print(f"Shooting data: FKShots, xG, npxG, npxG/Shots, G-xG, npG-npxG missing")
+        # shots: Total number of shots
+        # shots_t: Total number of shots on target
+        # per_shots_t: Percentage of shots that are on target
+        # shots_90: Total shots per 90 minutes 
+        # shots_t_90: Shots on target per 90 minutes 
+        # g_shots: Goals per shot
+        # g_shots_t: Goals per shots on target
+        # avg_shot_dist: Average shot distance
+        # fk_shots: Shots from freekicks 
+        # xg: Expected goals 
+        # npxg: Non-penalty expected goals 
+        # npxg_shots: Non-penalty expected goals per shot 
+        # g_minus_xg: Goals minus expected goals 
+        # npg_minus_npxg: Non-penalty goals minus non-penalty expected goals 
+        df.rename(columns={'Sh': 'shots', 'SoT': 'shots_t', 'SoT%': 'per_shots_t', 'Sh/90': 'shots_90', 'SoT/90': 'shots_t_90', 'G/Sh': 'g_shots', 'G/SoT': 'g_shots_t', 'Dist': 'avg_shot_dist', 'FK': 'fk_shots', 'npxG/Sh': 'npxg_shots', 'G-xG': 'g_minus_xg', 'np:G-xG': 'npg_minus_npxg'}, inplace=True)
+        
+        # df_passing
         df = df.join(df_passing.iloc[:,8:13])
-        df = df.rename(columns={'Cmp': 'PassesCompleted', 'Att': 'PassesAttempted', 'Cmp%': 'TotCmp%', 'TotDist': 'TotalPassDist', 'PrgDist': 'ProgPassDist', })
+        # pass_cmp: Passes completed 
+        # pass_att: Passes attempted 
+        # per_pass_cmp: Passes completion rate
+        # total_pass_dist: Total passing distance 
+        # prog_pass_dist: Progressive passing distance 
+        df = df.rename(columns={'Cmp': 'pass_cmp', 'Att': 'pass_att', 'Cmp%': 'per_pass_cmp', 'TotDist': 'total_pass_dist', 'PrgDist': 'prog_pass_dist'})
+        
         df = df.join(df_passing.iloc[:,13:16])
-        df = df.rename(columns={'Cmp': 'ShortPassCmp', 'Att': 'ShortPassAtt', 'Cmp%': 'ShortPassCmp%', })
+        # short_pass_cmp: Short passes completed (passes between 5 and 15 yards)
+        # short_pass_att: Short passes attempted (passes between 5 and 15 yards)
+        # per_short_pass_cmp: Short passes completion rate (passes between 5 and 15 yards)
+        df = df.rename(columns={'Cmp': 'short_pass_cmp', 'Att': 'short_pass_att', 'Cmp%': 'per_short_pass_cmp'})
+        
         df = df.join(df_passing.iloc[:,16:19])
-        df = df.rename(columns={'Cmp': 'MedPassCmp', 'Att': 'MedPassAtt', 'Cmp%': 'MedPassCmp%', })
+        # med_pass_cmp: Medium passes completed (passes between 15 and 30 yards)
+        # med_pass_att: Medium passes attempted (passes between 15 and 30 yards)
+        # per_med_pass_cmp: Medium passes completion rate (passes between 15 and 30 yards)
+        df = df.rename(columns={'Cmp': 'med_pass_cmp', 'Att': 'med_pass_att', 'Cmp%': 'per_med_pass_cmp'})
+        
         df = df.join(df_passing.iloc[:,19:22])
-        df = df.rename(columns={'Cmp': 'LongPassCmp', 'Att': 'LongPassAtt', 'Cmp%': 'LongPassCmp%', })
-        df = df.join(df_passing.iloc[:,22:31])
-        df = df.rename(columns={'Ast': 'Assists', 'xAG':'xAG', 'xA': 'xA', 'A-xAG': 'A-xAG', 'KP': 'KeyPasses', '1/3': 'Final1/3Cmp', 'PPA': 'PenAreaCmp', 'CrsPA': 'CrsPenAreaCmp', 'PrgP': 'ProgPasses', })
+        # long_pass_cmp: Long passes completed (passes longer than 30 yards)
+        # long_pass_att: Long passes attempted (passes longer than 30 yards)
+        # per_long_pass_cmp: Long passes completion rate (passes longer than 30 yards)
+        df = df.rename(columns={'Cmp': 'long_pass_cmp', 'Att': 'long_pass_att', 'Cmp%': 'per_long_pass_cmp' })
+        
+        df = df.join(df_passing.iloc[:,23:28])
+        # xag: Expected assisted goals (xG which follows a pass that assists a shot)
+        # xa: Expected assists (likelihood each pass becomes a goal assist)
+        # a-xag: Assists minus expected goals assisted 
+        # key_passes: Passes that directly lead to a shot 
+        # final_third_cmp: Completed passes that enter the final 1/3 of pitch closest to the goal not including set pieces 
+        # pen_area_cmp: Passes into the penalty area not including set pieces 
+        # crs_pen_area_cmp: Completed passes into the penalty box not including set pieces
+        df = df.rename(columns={'xA': 'xa', 'xAG': 'xag', 'A-xAG': 'a_minus_xag', 'KP': 'key_passes', '1/3': 'final_third_cmp', 'PPA': 'pen_area_cmp', 'CrsPA': 'crs_pen_area_cmp'})
 
         df = df.join(df_pass_types.iloc[:, 9:23])
-        df = df.rename(columns={'Live': 'LivePass', 'Dead': 'DeadPass', 'FK': 'FKPasses', 'TB': 'ThruBalls', 'Sw': 'Switches', 'Crs': 'Crs', 'CK': 'CK', 'In': 'InSwingCK', 'Out': 'OutSwingCK', 'Str': 'StrCK', 'TI': 'ThrowIn', 'Off': 'PassesToOff', 'Blocks':'PassesBlocked', 'Cmp':'Cmpxxx'})
+        # live_pass: Live-ball passes
+        # dead_pass: Dead-ball passes includes free kicks, corner kicks kick offs, throw ins and goal kicks
+        # fk_passes: Passes attempted from free kicks 
+        # thru_balls: Completed passes sent between defenders into open space 
+        # switches: Passes that travel more than 40 yards the width of the pitch 
+        # crosses: Crosses
+        # throw_ins: Throw-ins 
+        # ck: corner kicks 
+        # inswing_ck: Inswing corner kicks 
+        # outswing_ck: Outswing corner kicks 
+        # straight_ck: Straight corner kicks
+        # passes_to_off: Passes offside
+        # passes_blocked: Passes blocked by opponent
+        # cmpxxx: passes completed from live_pass (including crosses), corner kicks (ck), throw-ins (throw_ins), free kicks (fk_passes) and goal kicks
+        df = df.rename(columns={'Live': 'live_pass', 'Dead': 'dead_pass', 'FK': 'fk_passes', 'TB': 'thru_balls', 'Sw': 'switches', 'Crs': 'crosses', 'TI': 'throw_ins', 'CK': 'ck', 'In': 'inswing_ck', 'Out': 'outswing_ck', 'Str': 'straight_ck', 'Off': 'passes_to_off', 'Blocks':'passes_blocked', 'Cmp':'cmpxxx'})
 
-        df = df.join(df_gsca.iloc[:, 8:16].rename(columns={'SCA': 'SCA', 'SCA90': 'SCA90', 'PassLive': 'SCAPassLive', 'PassDead': 'SCAPassDead', 'TO': 'SCADrib', 'Sh': 'SCASh', 'Fld': 'SCAFld', 'Def': 'SCADef'}))
-        df = df.join(df_gsca.iloc[:, 16:24].rename(columns={'GCA': 'GCA', 'GCA90': 'GCA90', 'PassLive': 'GCAPassLive', 'PassDead': 'GCAPassDead', 'TO': 'GCADrib', 'Sh': 'GCASh', 'Fld': 'GCAFld', 'Def': 'GCADef'}))
+        df = df.join(df_gsca.iloc[:, 9:16])
+        # sc_actions: Shot-creating actions (the two offensive actions directly leading to a shot such as passes, take-ons, or drawing fouls) 
+        # sc_actions_90: Shot-creating actions per 90 minutes 
+        # sca_live_pass: Completed live-ball passes that lead to a shot attempt
+        # sca_dead_pass: Completed dead-ball pass that lead to a shot attempt
+        # sca_take_on: Successful take-ons that lead to a shot attempt
+        # sca_shot: Shots that lead to another shot attempt
+        # sca_fouls: Fouls drawn that lead to a shot attempt
+        # sca_def_actions: Defensive actions that lead to a shot attempt 
+        df.rename(columns={'SCA': 'sc_actions', 'SCA90': 'sc_actions_90', 'PassLive': 'sca_live_pass', 'PassDead': 'sca_dead_pass', 'TO': 'sca_take_on', 'Sh': 'sca_shot', 'Fld': 'sca_fouls', 'Def': 'sca_def_actions'}, inplace=True)
+        
+        df = df.join(df_gsca.iloc[:, 16:24])
+        # gc_actions: Goal-creating actions (the two offensive actions directly leading to a shot such as passes, take-ons, or drawing fouls)
+        # gc_actions_90: Goal-creating actions per 90 minutes 
+        # gca_live_pass: Completed live-ball passes that lead to a goal
+        # gca_dead_pass: Completed dead-ball pass that lead to a goal
+        # gca_take_on: Successful take-ons that lead to a goal
+        # gca_shot: Shots that lead to another goal-scoring shot
+        # gca_fouls: Fouls drawn that lead to a goal
+        # gca_def_actions: Defensive actions that lead to a goal 
+        df.rename(columns={'GCA': 'gc_actions', 'GCA90': 'gc_actions_90', 'PassLive': 'gca_live_pass', 'PassDead': 'gca_dead_pass', 'TO': 'gca_take_on', 'Sh': 'gca_shot', 'Fld': 'gca_fouls', 'Def': 'gca_def_actions'}, inplace=True)
 
-        df = df.join(df_defense.iloc[:,8:13].rename(columns={'Tkl': 'Tkl', 'TklW': 'TklWinPoss', 'Def 3rd': 'Def3rdTkl', 'Mid 3rd': 'Mid3rdTkl', 'Att 3rd': 'Att3rdTkl'}))
-        df = df.join(df_defense.iloc[:,13:24].rename(columns={'Tkl': 'DrbTkl', 'Att': 'DrbPastAtt', 'Tkl%': 'DrbTkl%', 'Lost': 'DrbPast', 'Blocks': 'Blocks', 'Sh': 'ShBlocks', 'Pass': 'PassBlocks', 'Int': 'Int', 'Tkl+Int': 'Tkl+Int', 'Clr': 'Clr', 'Err': 'Err'}))
+        df = df.join(df_defense.iloc[:,9:13])
+        # tackles: Number of players tackles 
+        # tackles_won: Tackles in which the tacklers team won possession of the ball after 
+        # tackles_def_third: Tackles in the defensive third of the pitch 
+        # tackles_mid_third: Tackles in the middle third of the pitch
+        # tackles_att_third: Tackles in the attacking third of the pitch
+        df.rename(columns={'Tkl': 'tackles', 'TklW': 'tackles_won', 'Def 3rd': 'tackles_def_third', 'Mid 3rd': 'tackles_mid_third', 'Att 3rd': 'tackles_att_third'}, inplace=True)
+        
+        df = df.join(df_defense.iloc[:,13:24])
+        # drib_tackles: Number of dribblers tackled 
+        # drib_attempted: Number of unsuccessful challenges plus number of dribblers tackled 
+        # per_drib_tackled: Percentage of dribblers tackled (number of dribblers tackled divided by the number of attempts to challenge an oppossing dribbler)
+        # drib_lost: Number of unsuccessful attempts to challenge a dribbling player 
+        # blocks: Number of times blocking the ball by standing in its path 
+        # shot_blocks : Number of times blocking a shot by standing in its path
+        # pass_blocks: Number of times blocking a pass by standing in its path 
+        # interceptions: Interceptions
+        # tackles_interceptions: Number of players tackled plus interceptions 
+        # clearances: Clearances 
+        # shot_errors: Mistakes leading to an opponents shots
+        df.rename(columns={'Tkl': 'drib_tackles', 'Att': 'drib_attempted', 'Tkl%': 'per_drib_tackled', 'Lost': 'drib_lost', 'Blocks': 'blocks', 'Sh': 'shot_blocks', 'Pass': 'pass_blocks', 'Int': 'interceptions', 'Tkl+Int': 'tackles_interceptions', 'Clr': 'clearances', 'Err': 'shot_errors'}, inplace=True)
 
         df = df.join(df_poss.iloc[:,8:30])
-        df = df.rename(columns={'Touches': 'Touches', 'Def Pen': 'DefPenTouch', 'Def 3rd': 'Def3rdTouch', 'Mid 3rd': 'Mid3rdTouch', 'Att 3rd': 'Att3rdTouch', 'Att Pen': 'AttPenTouch', 'Live': 'LiveTouch', 'Succ': 'SuccDrb', 'Att': 'AttDrb', 'Succ%': 'DrbSucc%', 'Tkld':'TimesTackled', 'Tkld%':'TimesTackled%', 'Carries':'Carries', 'TotDist':'TotalCarryDistance', 'PrgDist':'ProgCarryDistance', 'PrgC':'ProgCarries', '1/3':'CarriesToFinalThird', 'CPA':'CarriesToPenArea', 'Mis': 'CarryMistakes', 'Dis': 'Disposesed', 'Rec': 'ReceivedPass', 'PrgR':'ProgPassesRec'})
+        # touches: Number of times a player touched the ball 
+        # touches_def_pen: Touches in the defensive penalty area
+        # touches_def_third: Number of touches in the defensive third 
+        # touches_mid_third: Number of touches in the middle third
+        # touches_att_third: Number of touches in the attacking third 
+        # touches_att_pen: Number of touches in the opposing penalty area 
+        # live_touches: Live-ball touches 
+        # take_ons_attempted: Number of attempts to take on opposing players while dribbling 
+        # take_ons_success: Successful take ons 
+        # per_take_ons_success: Percentage of successful take ons from total take ons attempted 
+        # take_ons_tackled: Number of times tackled during taking on a player (failed take ons)
+        # per_tack_ons_tackled: Percentage of take ons that were tackled (percentage of failed take ons)
+        # carries: Number of times a player controlled the ball with their feet 
+        # dist_carries: Total disctance a player traveled (in yards) while carrying the ball
+        # prog_dist_carries: Progressive distance (yards to the oppositions goal) a player traveled while carrying the ball
+        # prog_carries: Number of carries that move the ball closer to the oppositions goal by at least 10 yards or carries into the opposing penalty area. Excludes carries that end in the defending half of the pitch.
+        # carries_att_third: Carries that enter the final third closest to the oppositions goal
+        # carries_att_pen: Carries into the oppositions penalty area
+        # miscontrols: Number of times a player failed when trying to gain control of the ball 
+        # dispossessions: Number of times a player gives up the ball after being tackled by an opposing player
+        # pass_rec: Number of times a player successfully receives a pass 
+        # prog_pass_rec: Number of progressive passes received 
+        df = df.rename(columns={'Touches': 'touches', 'Def Pen': 'touches_def_pen', 'Def 3rd': 'touches_def_third', 'Mid 3rd': 'touches_mid_third', 'Att 3rd': 'touches_att_third', 'Att Pen': 'touches_att_pen', 'Live': 'live_touches', 'Succ': 'take_ons_success', 'Att': 'take_ons_attempted', 'Succ%': 'per_take_ons_success', 
+                                'Tkld':'take_ons_tackled', 'Tkld%':'per_take_ons_tackled', 'Carries':'carries', 'TotDist':'dist_carries', 'PrgDist':'prog_dist_carries', 'PrgC':'prog_carries', '1/3':'carries_att_third', 'CPA':'carries_att_pen', 'Mis': 'miscontrols', 'Dis': 'dispossessions', 'Rec': 'pass_rec', 'PrgR':'prog_pass_rec'})
 
-        df = df.join(df_misc.iloc[:, 8:14])
-        df = df.rename(columns={'CrdY': 'Yellows', 'CrdR': 'Reds', '2CrdY': 'Yellow2', 'Fls': 'Fls', 'Fld': 'Fld', 'Off': 'Off', })
-        df = df.join(df_misc.iloc[:,17:24])
-        df = df.rename(columns={'PKwon': 'PKwon', 'PKcon': 'PKcon', 'OG': 'OG', 'Recov': 'Recov', 'Won': 'AerialWins', 'Lost': 'AerialLoss', 'Won%': 'AerialWin%', })
 
         # Make sure to drop all blank rows (FBRef's tables have several)
-        df.dropna(subset = ["Player"], inplace=True)
+        df.dropna(subset = ["player"], inplace=True)
+
 
         # Turn the minutes columns to integers. So from '1,500' to '1500'. Otherwise it can't do calculations with minutes
         for i in range(0,len(df)):
@@ -721,39 +948,47 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         ###############################################################################
 
         df = pd.read_csv("%s%s.csv" %(root, raw_nongk))
-        df = df[df['Pos'].str.contains("GK")].reset_index().iloc[:,1:]
+        df = df[df['position'].str.contains("GK")].reset_index().iloc[:,1:]
         df_gk['Pos'] = df_gk['Pos'].astype(str)
         df_gk = df_gk[df_gk['Pos'].str.contains('GK')]
         df_gk = df_gk.reset_index().iloc[:,1:]
         df_gk = df_gk.rename(columns={'PKatt':'PKsFaced'})
 
         df = df.join(df_gk.iloc[:, 11:26].astype(float), lsuffix='.1', rsuffix='.2')
-        df = df.rename(columns={'GA': 'GA', 'GA90': 'GA90', 'SoTA': 'SoTA', 'Saves': 'Saves', 'Save%.1': 'Save%', 'W': 'W', 'D': 'D', 'L': 'L', 'CS': 'CS', 'CS%': 'CS%', 'PKsFaced': 'PKsFaced', 'PKA': 'PKA', 'PKsv': 'PKsv', 'PKm': 'PKm', 'Save%.2': 'PKSave%', })
+        df = df.rename(columns={'Player':'player', 'Nation':'nation', 'Squad': 'club', 'Comp': 'comp', 'Age': 'age', 'Born':'year', 'MP': 'matches', 'Starts': 'starts', 'Min': 'minutes',
+                                  'SoTA':'shots_ota', 'Saves':'saves', 'Save%.1':'per_saves', 'W':'wins', 'D':'draws', 'L':'losses', 'CS':'clean_sheets', 'CS%':'per_clean_sheets', 'PKatt':'pk_faced',
+                                  'PKA': 'pk_allowed', 'PKsv': 'pk_saved', 'PKm':'pk_missed', 'Save%.2':'per_pk_saves'})
 
         df_advgk['Pos'] = df_advgk['Pos'].astype(str)
         df_advgk = df_advgk[df_advgk['Pos'].str.contains('GK')]
         df_advgk = df_advgk.reset_index().iloc[:,1:]
-        df = df.join(df_advgk.iloc[:,9:20].astype(float).rename(columns={'PKA': 'PKGA', 'FK': 'FKGA', 'CK': 'CKGA', 'OG': 'OGA', 'PSxG': 'PSxG', 'PSxG/SoT': 'PSxG/SoT', 'PSxG+/-': 'PSxG+/-', '/90': 'PSxG+/- /90', 'Cmp': 'LaunchCmp', 'Att': 'LaunchAtt', 'Cmp%': 'LaunchPassCmp%'}))
-        df = df.join(df_advgk.iloc[:,20:24].astype(float).rename(columns={'Att': 'PassAtt', 'Thr': 'PassThr', 'Launch%': 'PassesLaunch%', 'AvgLen': 'AvgLenLaunch'}))
-        df = df.join(df_advgk.iloc[:,24:33].astype(float).rename(columns={'Att': 'GoalKicksAtt', 'Launch%': 'GoalKicksLaunch%', 'AvgLen': 'AvgLen', 'Opp': 'OppCrs', 'Stp': 'StpCrs', 'Stp%': 'CrsStp%', '#OPA': '#OPA', '#OPA/90': '#OPA/90', 'AvgDist': 'AvgDistOPA'}))
+        df = df.join(df_advgk.iloc[:,9:20].astype(float).rename(columns={'PKA': 'pk_gc', 'FK': 'fk_gc', 'CK': 'ck_gc', 'OG': 'OG_c', 'PSxG': 'post_shot_xg', 'PSxG/SoT': 'post_shot_xg_per_shot_t', 'PSxG+/-': 'post_shot_xg_plus_minus', '/90': 'post_shot_xg_plus_minus_90', 'Cmp': 'launched_pass_cmp', 'Att': 'launched_pass_att', 'Cmp%': 'per_launch_pass_cmp'}))
+        df = df.join(df_advgk.iloc[:,20:24].astype(float).rename(columns={'Att (GK)': 'pass_att_gk', 'Thr': 'pass_thow', 'Launch%': 'per_pass_launched', 'AvgLen': 'avg_len'}))
+        df = df.join(df_advgk.iloc[:,24:33].astype(float).rename(columns={'Att': 'gk_att', 'Launch%': 'per_gk_launched', 'AvgLen': 'gk_avg_len', 'Opp': 'opp_crosses', 'Stp': 'stop_crosses', 'Stp%': 'per_stop_crosses', '#OPA': 'def_actions_opa', '#OPA/90': 'def_actions_opa_90', 'AvgDist': 'avg_dist_def_actions'}))
 
         df.to_csv("%s%s.csv" %(root,raw_gk), index=False, encoding = 'utf-8-sig')
-
+        
+        
         ##################################################################################
         ##################### Final file for outfield data ###############################
         ##################################################################################
 
         df = pd.read_csv("%s%s.csv" %(root, raw_nongk))
         df_90s = pd.read_csv("%s%s.csv" %(root, raw_nongk))
-        df_90s['90s'] = df_90s['Min']/90
-        for i in range(10,125):
+        df_90s['90s'] = df_90s['minutes']/90
+
+        for i in range(11,118):
             df_90s.iloc[:,i] = df_90s.iloc[:,i]/df_90s['90s']
-        df_90s = df_90s.iloc[:,10:].add_suffix('Per90')
+
+        df_90s = df_90s.iloc[:,11:].add_suffix('Per90')
         df_new = df.join(df_90s)
 
-        if comp in ['Liga MX', 'Primeira Liga', 'Eredivisie', 'Championship']:
+        try:
             for i in range(len(df_new)):
                 df_new['Age'][i] = int(df_new['Age'][i][:2])
+        except:
+            pass
+
 
         df_new.to_csv("%s%s.csv" %(root, final_nongk), index=False, encoding = 'utf-8-sig')
 
@@ -764,16 +999,18 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
 
         df = pd.read_csv("%s%s.csv" %(root, raw_gk))
         df_90s = pd.read_csv("%s%s.csv" %(root, raw_gk))
-        df_90s['90s'] = df_90s['Min']/90
-        for i in range(10,164):
+        df_90s['90s'] = df_90s['minutes']/90
+        for i in range(11,157):
             df_90s.iloc[:,i] = df_90s.iloc[:,i]/df_90s['90s']
-        df_90s = df_90s.iloc[:,10:].add_suffix('Per90')
+        df_90s = df_90s.iloc[:,11:].add_suffix('Per90')
         df_new = df.join(df_90s)
 
-        if comp in ['Liga MX', 'Primeira Liga', 'Eredivisie', 'Championship']:
+        try:
             for i in range(len(df_new)):
                 df_new['Age'][i] = int(df_new['Age'][i][:2])
-
+        except:
+            pass
+            
         df_new.to_csv("%s%s.csv" %(root, final_gk), index=False, encoding = 'utf-8-sig')
 
 
@@ -844,10 +1081,10 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         df['TeamMins'] = int(1)
         df['TeamTouches90'] = float(0.0)
 
-        player_list = list(df['Player'])
+        player_list = list(df['player'])
 
         for i in range(len(player_list)):
-            team_name = df[df['Player']==player_list[i]]['Squad'].values[0]
+            team_name = df[df['player']==player_list[i]]['club'].values[0]
             team_poss = teams[teams['Squad']==team_name]['Poss'].values[0]
             opp_touch = teams[teams['Squad']==team_name]['Opp Touches'].values[0]
             team_mins = teams[teams['Squad']==team_name]['Team Min'].values[0]
@@ -858,33 +1095,37 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
             df.at[i, 'TeamTouches90'] = team_touches
 
         df.iloc[:,9:] = df.iloc[:,9:].astype(float)
+        df.carries = df.carries.astype(float)
+        df.touches = df.touches.astype(float)
+
         # All of these are the possession-adjusted columns. A couple touch-adjusted ones at the bottom
-        df['pAdjTkl+IntPer90'] = (df['Tkl+IntPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjClrPer90'] = (df['ClrPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjShBlocksPer90'] = (df['ShBlocksPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjPassBlocksPer90'] = (df['PassBlocksPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjIntPer90'] = (df['IntPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjDrbTklPer90'] = (df['DrbTklPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjTklWinPossPer90'] = (df['DrbTklPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjDrbPastPer90'] = (df['DrbPastPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjAerialWinsPer90'] = (df['AerialWinsPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjAerialLossPer90'] = (df['AerialLossPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjDrbPastAttPer90'] = (df['DrbPastAttPer90']/(100-df['AvgTeamPoss']))*50
-        df['TouchCentrality'] = (df['TouchesPer90']/df['TeamTouches90'])*100
+        df['pAdj_tackles_interceptionsPer90'] = (df['tackles_interceptionsPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_clearancesPer90'] = (df['clearancesPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_shot_blocksPer90'] = (df['shot_blocksPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_pass_blocksPer90'] = (df['pass_blocksPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_interceptionsPer90'] = (df['interceptionsPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_drib_tacklesPer90'] = (df['drib_tacklesPer90']/(100-df['AvgTeamPoss']))*50
+        #df['pAdj_tackles_win_possessionPer90'] = (df['drib_tacklesPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_drib_lostPer90'] = (df['drib_lostPer90']/(100-df['AvgTeamPoss']))*50
+        #df['pAdjAerialWinsPer90'] = (df['AerialWinsPer90']/(100-df['AvgTeamPoss']))*50
+        #df['pAdjAerialLossPer90'] = (df['AerialLossPer90']/(100-df['AvgTeamPoss']))*50
+        #df['pAdjDrbPastAttPer90'] = (df['DrbPastAttPer90']/(100-df['AvgTeamPoss']))*50
+        df['touch_centrality'] = (df['touchesPer90']/df['TeamTouches90'])*100
         # df['pAdj#OPAPer90'] =(df['#OPAPer90']/(100-df['AvgTeamPoss']))*50
-        df['Tkl+IntPer600OppTouch'] = df['Tkl+Int'] /(df['OppTouches']*(df['Min']/df['TeamMins']))*600
-        df['pAdjTouchesPer90'] = (df['TouchesPer90']/(df['AvgTeamPoss']))*50
-        df['CarriesPer50Touches'] = df['Carries'] / df['Touches'] * 50
-        df['ProgCarriesPer50Touches'] = df['ProgCarries'] / df['Touches'] * 50
-        df['ProgPassesPer50CmpPasses'] = df['ProgPasses'] / df['PassesCompleted'] * 50
+        df['tackles_interceptionsPer600OppTouch'] = df['tackles_interceptions'] /(df['OppTouches']*(df['minutes']/df['TeamMins']))*600
+        df['pAdj_touchesPer90'] = (df['touchesPer90']/(df['AvgTeamPoss']))*50
+        df['carriesPer50Touches'] = df.apply(lambda row: row['carries'] / row['touches'] if row['touches'] != 0 else 0, axis=1)
+        df['prog_carriesPer50Touches'] = df.apply(lambda row: row['prg_c'] / row['touches'] if row['touches'] != 0 else 0, axis=1)
+        df['prog_passesPer50CmpPasses'] = df.apply(lambda row: row['prg_p'] / row['pass_cmp'] if row['pass_cmp'] != 0 else 0, axis=1)
 
 
         # Now we'll add the players' actual positions, from @jaseziv, into the file
         tm_pos = pd.read_csv('https://github.com/griffisben/Soccer-Analyses/blob/main/TransfermarktPositions-Jase_Ziv83.csv?raw=true')
-        df = pd.merge(df, tm_pos, on ='Player', how ='left')
+        tm_pos.rename(columns={'Player': 'player'}, inplace=True)
+        df = pd.merge(df, tm_pos, on ='player', how ='left')
 
         for i in range(len(df)):
-            if df.Pos[i] == 'GK':
+            if df.position[i] == 'GK':
                 df['Main Position'][i] = 'Goalkeeper'
         df.to_csv("%s%s.csv" %(root, final_nongk), index=False, encoding='utf-8-sig')
 
@@ -901,10 +1142,10 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
         df['TeamMins'] = float(0.0)
         df['TeamTouches90'] = float(0.0)
 
-        player_list = list(df['Player'])
+        player_list = list(df['player'])
 
         for i in range(len(player_list)):
-            team_name = df[df['Player']==player_list[i]]['Squad'].values[0]
+            team_name = df[df['player']==player_list[i]]['club'].values[0]
             team_poss = teams[teams['Squad']==team_name]['Poss'].values[0]
             opp_touch = teams[teams['Squad']==team_name]['Opp Touches'].values[0]
             team_mins = teams[teams['Squad']==team_name]['Team Min'].values[0]
@@ -915,1709 +1156,100 @@ def scrape_fbref_next12_leagues_players(comps, seasons):
             df.at[i, 'TeamTouches90'] = team_touches
 
         df.iloc[:,9:] = df.iloc[:,9:].astype(float)
+        df.carries = df.carries.astype(float)
+        df.touches = df.touches.astype(float)
+
         # Same thing, makes pAdj stats for the GK file
-        df['pAdjTkl+IntPer90'] = (df['Tkl+IntPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjClrPer90'] = (df['ClrPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjShBlocksPer90'] = (df['ShBlocksPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjPassBlocksPer90'] = (df['PassBlocksPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjIntPer90'] = (df['IntPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjDrbTklPer90'] = (df['DrbTklPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjTklWinPossPer90'] = (df['DrbTklPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjDrbPastPer90'] = (df['DrbPastPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjAerialWinsPer90'] = (df['AerialWinsPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjAerialLossPer90'] = (df['AerialLossPer90']/(100-df['AvgTeamPoss']))*50
-        df['pAdjDrbPastAttPer90'] = (df['DrbPastAttPer90']/(100-df['AvgTeamPoss']))*50
-        df['TouchCentrality'] = (df['TouchesPer90']/df['TeamTouches90'])*100
-        df['pAdj#OPAPer90'] =(df['#OPAPer90']/(100-df['AvgTeamPoss']))*50
-        df['Tkl+IntPer600OppTouch'] = df['Tkl+Int'] /(df['OppTouches']*(df['Min']/df['TeamMins']))*600
-        df['pAdjTouchesPer90'] = (df['TouchesPer90']/(df['AvgTeamPoss']))*50
-        df['CarriesPer50Touches'] = df['Carries'] / df['Touches'] * 50
-        df['ProgCarriesPer50Touches'] = df['ProgCarries'] / df['Touches'] * 50
-        df['ProgPassesPer50CmpPasses'] = df['ProgPasses'] / df['PassesCompleted'] * 50
+        df['pAdj_tackles_interceptionsPer90'] = (df['tackles_interceptionsPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_clearancesPer90'] = (df['clearancesPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_shot_blocksPer90'] = (df['shot_blocksPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_pass_blocksPer90'] = (df['pass_blocksPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_interceptionsPer90'] = (df['interceptionsPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_drib_tacklesPer90'] = (df['drib_tacklesPer90']/(100-df['AvgTeamPoss']))*50
+        #df['pAdjTklWinPossPer90'] = (df['DrbTklPer90']/(100-df['AvgTeamPoss']))*50
+        df['pAdj_drib_lostPer90'] = (df['drib_lostPer90']/(100-df['AvgTeamPoss']))*50
+        #df['pAdjAerialWinsPer90'] = (df['AerialWinsPer90']/(100-df['AvgTeamPoss']))*50
+        #df['pAdjAerialLossPer90'] = (df['AerialLossPer90']/(100-df['AvgTeamPoss']))*50
+        #df['pAdjDrbPastAttPer90'] = (df['DrbPastAttPer90']/(100-df['AvgTeamPoss']))*50
+        df['touch_centrality'] = (df['touchesPer90']/df['TeamTouches90'])*100
+        #df['pAdj#OPAPer90'] =(df['#OPAPer90']/(100-df['AvgTeamPoss']))*50
+        df['tackles_interceptionsPer600OppTouch'] = df['tackles_interceptions'] /(df['OppTouches']*(df['minutes']/df['TeamMins']))*600
+        df['pAdj_touchesPer90'] = (df['touchesPer90']/(df['AvgTeamPoss']))*50
+        df['carriesPer50Touches'] = df.apply(lambda row: row['carries'] / row['touches'] if row['touches'] != 0 else 0, axis=1)
+        df['prog_carriesPer50Touches'] = df.apply(lambda row: row['prg_c'] / row['touches'] if row['touches'] != 0 else 0, axis=1)
+        df['prog_passesPer50CmpPasses'] = df.apply(lambda row: row['prg_p'] / row['pass_cmp'] if row['pass_cmp'] != 0 else 0, axis=1)
 
 
         # Just adding the main positions to the GK too, but of course, they will all be GK lol. Keeps other program variables clean
         tm_pos = pd.read_csv('https://github.com/griffisben/Soccer-Analyses/blob/main/TransfermarktPositions-Jase_Ziv83.csv?raw=true')
-        df = pd.merge(df, tm_pos, on ='Player', how ='left')
+        tm_pos.rename(columns={'Player': 'player'}, inplace=True)
+        df = pd.merge(df, tm_pos, on ='player', how ='left')
 
         for i in range(len(df)):
-            if df.Pos[i] == 'GK':
+            if df.position[i] == 'GK':
                 df['Main Position'][i] = 'Goalkeeper'
         df.to_csv("%s%s.csv" %(root, final_gk), index=False, encoding='utf-8-sig')
 
         os.remove(f'{root}{raw_gk}.csv')
         os.remove(f'{root}{raw_nongk}.csv')
         os.remove(f'{root}{final_nongk} TEAMS.csv')
-
-    ### combine all files
-    df = pd.DataFrame()
-    df_gk = pd.DataFrame()
-    for k in range(len(comps)):
-        season = seasons[k]
-        comp = comps[k]
         
-        final_nongk = 'Final FBRef %s - %s' %(season,comp)
-        final_gk = 'Final FBRef GK %s - %s' %(season,comp)
-
-        df1 = pd.read_csv(f'{root}{final_nongk}.csv')
-        df1_gk = pd.read_csv(f'{root}{final_gk}.csv')
-
-        df = pd.concat([df,df1])
-        df_gk = pd.concat([df_gk,df1_gk])
+scrape_fbref_next12_leagues_players(comps=comps_next7, seasons=ssns)
         
-        os.remove(f'{root}{final_gk}.csv')
-        os.remove(f'{root}{final_nongk}.csv')
-
-    df.to_csv(f'{root}Final FBRef Next 12 Leagues.csv', index=False, encoding='utf-8-sig')
-    df_gk.to_csv(f'{root}Final FBRef Next 12 Leagues GK.csv', index=False, encoding='utf-8-sig')
-
-    print('Done :) File named "Final FBRef Next 12 Leagues" is located at  %s' %root)
-
-
-
-def combine_t5_next12_fbref(t5_season):
-    root = str(Path(os.getcwd()).parents[0]).replace('\\','/')+'/'
+        
+for comp, postgres in comps_postgres_next7.items():
     
-    t5 = pd.read_csv(f'{root}Final FBRef {t5_season}.csv')
-    n12 = pd.read_csv(f'{root}Final FBRef Next 12 Leagues.csv')
+    season = comps_seasons_next7[comp]
     
-    df = pd.concat([t5,n12])
-    df.to_csv(f'{root}Final FBRef {t5_season}.csv', encoding='utf_8_sig', index=False)
+    data = pd.read_csv(os.path.join(
+        root,
+        f"Final FBRef {season} - {comp}.csv"))
     
+    data.drop(columns=['90s'], inplace=True)
+    
+    data = data.loc[:, ~data.columns.duplicated()]
+    data = data.drop_duplicates()
+    
+    create_table_fbref_outfield(data=data, comp=comp, season=season, postgres=postgres, date=date_today)
+    
+    os.remove(os.path.join(
+        root,
+        f"Final FBRef {season} - {comp}.csv"))
+    
+    data = pd.read_csv(os.path.join(
+        root,
+        f"Final FBRef GK {season} - {comp}.csv"))
+    
+    data = data.loc[:, ~data.columns.duplicated()]
+    data = data.drop_duplicates()
+    
+    data.drop(columns=['position', '90s', 'goals', 'assists', 'g_a', 'np_goals', 'pk', 'pk_att', 'prg_c', 'prg_p', 'prg_r',
+                       'shots', 'shots_t', 'per_shots_t', 'shots_90', 'shots_t_90', 'g_shots', 'g_shots_t', 'fk_shots',
+                       'xG', 'npxG', 'npxg_shots', 'g_minus_xg', 'npg_minus_npxg', 'xag', 'a_minus_xag', 'thru_balls',
+                       'throw_ins', 'ck', 'inswing_ck', 'outswing_ck', 'straight_ck', 'sca_take_on', 'sca_shot', 'sca_fouls',
+                       'sca_def_actions', 'gc_actions', 'gc_actions_90', 'gca_live_pass', 'gca_dead_pass', 'gca_take_on',
+                       'gca_shot', 'gca_fouls', 'gca_def_actions', 'tackles_won', 'tackles_def_third', 'tackles_mid_third',
+                       'tackles_att_third', 'drib_tackles', 'drib_attempted', 'per_drib_tackled', 'drib_lost', 'blocks',
+                       'shot_blocks', 'pass_blocks', 'interceptions', 'tackles_interceptions', 'shot_errors',
+                       'touches_att_third', 'touches_att_pen', 'take_ons_attempted', 'take_ons_success', 'per_take_ons_success',
+                       'take_ons_tackled', 'per_take_ons_tackled', 'prog_carries', 'carries_att_third', 'carries_att_pen',
+                       'prog_pass_rec', 
+                       'goalsPer90', 'assistsPer90', 'g_aPer90', 'np_goalsPer90', 'pkPer90', 'pk_attPer90', 'prg_cPer90', 'prg_pPer90', 'prg_rPer90',
+                       'shotsPer90', 'shots_tPer90', 'per_shots_tPer90', 'shots_90Per90', 'shots_t_90Per90', 'g_shotsPer90', 'g_shots_tPer90', 'fk_shotsPer90',
+                       'xGPer90', 'npxGPer90', 'npxg_shotsPer90', 'g_minus_xgPer90', 'npg_minus_npxgPer90', 'xagPer90', 'a_minus_xagPer90', 'thru_ballsPer90',
+                       'throw_insPer90', 'ckPer90', 'inswing_ckPer90', 'outswing_ckPer90', 'straight_ckPer90', 'sca_take_onPer90', 'sca_shotPer90', 'sca_foulsPer90',
+                       'sca_def_actionsPer90', 'gc_actionsPer90', 'gc_actions_90Per90', 'gca_live_passPer90', 'gca_dead_passPer90', 'gca_take_onPer90',
+                       'gca_shotPer90', 'gca_foulsPer90', 'gca_def_actionsPer90', 'tackles_wonPer90', 'tackles_def_thirdPer90', 'tackles_mid_thirdPer90',
+                       'tackles_att_thirdPer90', 'drib_tacklesPer90', 'drib_attemptedPer90', 'per_drib_tackledPer90', 'drib_lostPer90', 'blocksPer90',
+                       'shot_blocksPer90', 'pass_blocksPer90', 'interceptionsPer90', 'tackles_interceptionsPer90', 'shot_errorsPer90',
+                       'touches_att_thirdPer90', 'touches_att_penPer90', 'take_ons_attemptedPer90', 'take_ons_successPer90', 'per_take_ons_successPer90',
+                       'take_ons_tackledPer90', 'per_take_ons_tackledPer90', 'prog_carriesPer90', 'carries_att_thirdPer90', 'carries_att_penPer90',
+                       'prog_pass_recPer90'], inplace=True)
+    
+    create_table_fbref_goalkeeper(data=data, comp=comp, season=season, postgres=postgres, date=date_today)
+    
+    os.remove(os.path.join(
+        root,
+        f"Final FBRef GK {season} - {comp}.csv"))
 
 
-
-
-def fbref_scout_report(season, program, player_pos, playerPrompt, SquadPrompt, minutesPlayed, compP, saveinput, signature, data_date, fbref_file_path):
-    # # Ask what file to use
-    ssn = season
-    if program == "gk":
-        root = fbref_file_path
-        final_gk = f'Final FBRef GK {season}' ####################################### INPUT FILE NAME HERE
-        path = "%s%s.csv" %(root, final_gk)
-    else:
-        root = fbref_file_path
-        final_nongk = f'Final FBRef {season}' ####################################### INPUT FILE NAME HERE
-        path = "%s%s.csv" %(root, final_nongk)
-
-
-    # Set the default style to white
-    sns.set_style("white")
-
-    # Data
-    df = pd.read_csv(path)
-    df["AerialWin%"] = (df["AerialWins"]/(df["AerialWins"]+df["AerialLoss"]))*100
-    df["Dispossessed"] = df["Disposesed"]
-    df["DispossessedPer90"] = df["DisposesedPer90"]
-    df["PctCmpFinal1/3"] = (df["Final1/3Cmp"]/df["PassesCompleted"])*100
-    df["Comp"] = df["Comp"].replace("eng Premier League","Premier League")
-    df["Comp"] = df["Comp"].replace("fr Ligue 1","Ligue 1")
-    df["Comp"] = df["Comp"].replace("de Bundesliga","Bundesliga")
-    df["Comp"] = df["Comp"].replace("it Serie A","Serie A")
-    df["Comp"] = df["Comp"].replace("es La Liga","La Liga")
-    df['Main Position'].dropna()
-    df = df.fillna(0)
-
-
-
-    def strikers():
-        ##### STRIKERS #####
-
-        f, axes = plt.subplots(3, 4, figsize=(20,10))
-
-        # Filter data
-        player = df[df['Player']==playerPrompt]
-        dfFilt = df[df['Min']>=minutesPlayed]
-        dfFilt = dfFilt[dfFilt['Pos']==player_pos]
-#         if ((player_pos == 'Goalkeeper') or
-#             (player_pos == 'Centre-Back') or
-#             (player_pos == 'Left-Back') or
-#             (player_pos == 'Right-Back') or
-#             (player_pos == 'Defensive Midfield') or
-#             (player_pos == 'Central Midfield') or
-#             (player_pos == 'Left Midfield') or
-#             (player_pos == 'Right Midfield') or
-#             (player_pos == 'Attacking Midfield') or
-#             (player_pos == 'Left Winger') or
-#             (player_pos == 'Right Winger') or
-#             (player_pos == 'Second Striker') or
-#             (player_pos == 'Centre-Forward')
-#            ):
-#             dfFilt = dfFilt[dfFilt['Main Position']==player_pos]
-#         if player_pos == 'Fullback':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Left-Back') |
-#                             (dfFilt['Main Position']=='Right-Back')]
-#         if player_pos == 'Midfielder':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Defensive Midfield') |
-#                             (dfFilt['Main Position']=='Central Midfield') |
-#                             (dfFilt['Main Position']=='Attacking Midfield')]
-#         if player_pos == 'Winger':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Right Midfield') |
-#                             (dfFilt['Main Position']=='Left Midfield') |
-#                             (dfFilt['Main Position']=='Left Winger') |
-#                             (dfFilt['Main Position']=='Right Winger')]
-#         if player_pos == 'Forward':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Centre-Forward') |
-#                             (dfFilt['Main Position']=='Second Striker') |
-#                             (dfFilt['Main Position']=='Left Winger') |
-#                             (dfFilt['Main Position']=='Right Winger')]
-            
-        if SquadPrompt != "":
-            player = player[player['Squad']==SquadPrompt]
-        if compP == "n":
-            dfFilt = dfFilt
-        else:
-            dfFilt = dfFilt[dfFilt['Comp']==compP]
-#         if compP == "epl":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Premier League"]
-#         if compP == "bundesliga":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Bundesliga"]
-#         if compP == "la liga":
-#             dfFilt = dfFilt[dfFilt['Comp']=="La Liga"]
-#         if compP == "ligue 1":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Ligue 1"]
-#         if compP == "serie a":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Serie A"]
-        Comp = player['Comp'].values[0]
-
-        # Variables to be plotted
-        stat1 = "GlsxxPer90"
-        stat2 = "npxGPer90"
-        stat3 = "AssistsPer90"
-        stat4 = "xAPer90"
-        stat5 = "DrbSucc%"
-        stat6 = "G/SoT"
-        stat7 = "SCA90"
-        stat8 = "GCA90"
-        stat9 = "TouchCentrality"
-        stat10 = "ProgPassesPer90"
-        stat11 = "Tkl+IntPer90"
-        stat12 = "AerialWin%"
-        #Get the specific player's value (and name)
-        x1 = player[stat1].values[0]
-        x2 = player[stat2].values[0]
-        x3 = player[stat3].values[0]
-        x4 = player[stat4].values[0]
-        x5 = player[stat5].values[0]
-        x6 = player[stat6].values[0]
-        x7 = player[stat7].values[0]
-        x8 = player[stat8].values[0]
-        x9 = player[stat9].values[0]
-        x10 = player[stat10].values[0]
-        x11 = player[stat11].values[0]
-        x12 = player[stat12].values[0]
-        playerName = player["Player"].values[0]
-        teamName = player["Squad"].values[0]
-        str_age = player["Age"][:2]
-        age = str_age.values[0]
-        minutes = player['Min'].values[0]
-
-        # Calculate their percentile
-        pct1 = stats.percentileofscore(dfFilt[stat1],x1)
-        pct2 = stats.percentileofscore(dfFilt[stat2],x2)
-        pct3 = stats.percentileofscore(dfFilt[stat3],x3)
-        pct4 = stats.percentileofscore(dfFilt[stat4],x4)
-        pct5 = stats.percentileofscore(dfFilt[stat5],x5)
-        pct6 = stats.percentileofscore(dfFilt[stat6],x6)
-        pct7 = stats.percentileofscore(dfFilt[stat7],x7)
-        pct8 = stats.percentileofscore(dfFilt[stat8],x8)
-        pct9 = stats.percentileofscore(dfFilt[stat9],x9)
-        pct10 = stats.percentileofscore(dfFilt[stat10],x10)
-        pct11 = stats.percentileofscore(dfFilt[stat11],x11)
-        pct12 = stats.percentileofscore(dfFilt[stat12],x12)
-        pctMins = stats.percentileofscore(dfFilt['Min'],minutes)
-
-        if pct1 >= 90:
-            col = "darkgreen"
-        if 70 <= pct1 < 90:
-            col = "yellowgreen"
-        if 50 <= pct1 < 70:
-            col = "darkgrey"
-        if 30 <= pct1 < 50:
-            col = "orange"
-        if 0 <= pct1 < 30:
-            col = "red"
-        # The plot & player line
-        ax1 = sns.kdeplot(dfFilt[stat1], color=col, fill=col, ax=axes[0,0])
-        ax1.axvline(x1, 0, .95, lw=2.5, color=col)
-        ## Percentile lines
-        ax1.set_title("Non-Pen Goals: %.2f\n%i percentile" % (x1, pct1))
-        # Clean graph
-        ax1.set(xlabel=None)
-        ax1.set(ylabel=None)
-        ax1.set(yticks=[])
-
-        if pct2 >= 90:
-            col = "darkgreen"
-        if 70 <= pct2 < 90:
-            col = "yellowgreen"
-        if 50 <= pct2 < 70:
-            col = "darkgrey"
-        if 30 <= pct2 < 50:
-            col = "orange"
-        if 0 <= pct2 < 30:
-            col = "red"
-        # The plot & player line
-        ax2 = sns.kdeplot(dfFilt[stat2], color=col, fill=col, ax=axes[0,1])
-        ax2.axvline(x2, 0, .95, lw=2.5, color=col)
-        ax2.set_title("npxG: %.2f\n%i percentile" % (x2, pct2))
-        # Clean graph
-        ax2.set(xlabel=None)
-        ax2.set(ylabel=None)
-        ax2.set(yticks=[])
-
-        if pct3 >= 90:
-            col = "darkgreen"
-        if 70 <= pct3 < 90:
-            col = "yellowgreen"
-        if 50 <= pct3 < 70:
-            col = "darkgrey"
-        if 30 <= pct3 < 50:
-            col = "orange"
-        if 0 <= pct3 < 30:
-            col = "red"
-        # The plot & player line
-        ax3 = sns.kdeplot(dfFilt[stat3], color=col, fill=col, ax=axes[0,2])
-        ax3.axvline(x3, 0, .95, lw=2.5, color=col)
-        ax3.set_title("Assists: %.2f\n%i percentile" % (x3, pct3))
-        # Clean graph
-        ax3.set(xlabel=None)
-        ax3.set(ylabel=None)
-        ax3.set(yticks=[])
-
-        if pct4 >= 90:
-            col = "darkgreen"
-        if 70 <= pct4 < 90:
-            col = "yellowgreen"
-        if 50 <= pct4 < 70:
-            col = "darkgrey"
-        if 30 <= pct4 < 50:
-            col = "orange"
-        if 0 <= pct4 < 30:
-            col = "red"
-        # The plot & player line
-        ax4 = sns.kdeplot(dfFilt[stat4], color=col, fill=col, ax=axes[0,3])
-        ax4.axvline(x4, 0, .95, lw=2.5, color=col)
-        ax4.set_title("xA: %.2f\n%i percentile" % (x4, pct4))
-        # Clean graph
-        ax4.set(xlabel=None)
-        ax4.set(ylabel=None)
-        ax4.set(yticks=[])
-
-        if pct5 >= 90:
-            col = "darkgreen"
-        if 70 <= pct5 < 90:
-            col = "yellowgreen"
-        if 50 <= pct5 < 70:
-            col = "darkgrey"
-        if 30 <= pct5 < 50:
-            col = "orange"
-        if 0 <= pct5 < 30:
-            col = "red"
-        # The plot & player line
-        ax5 = sns.kdeplot(dfFilt[stat5], color=col, fill=col, ax=axes[1,0])
-        ax5.axvline(x5, 0, .95, lw=2.5, color=col)
-        ax5.set_title("Dribble Success Pct: %.1f\n%i percentile" % (x5, pct5))
-        # Clean graph
-        ax5.set(xlabel=None)
-        ax5.set(ylabel=None)
-        ax5.set(yticks=[])
-
-        if pct6 >= 90:
-            col = "darkgreen"
-        if 70 <= pct6 < 90:
-            col = "yellowgreen"
-        if 50 <= pct6 < 70:
-            col = "darkgrey"
-        if 30 <= pct6 < 50:
-            col = "orange"
-        if 0 <= pct6 < 30:
-            col = "red"
-        # The plot & player line
-        ax6 = sns.kdeplot(dfFilt[stat6], color=col, fill=col, ax=axes[1,1])
-        ax6.axvline(x6, 0, .95, lw=2.5, color=col)
-        ax6.set_title("Goals per Shot on Target: %.2f\n%i percentile" % (x6, pct6))
-        # Clean graph
-        ax6.set(xlabel=None)
-        ax6.set(ylabel=None)
-        ax6.set(yticks=[])
-
-        if pct7 >= 90:
-            col = "darkgreen"
-        if 70 <= pct7 < 90:
-            col = "yellowgreen"
-        if 50 <= pct7 < 70:
-            col = "darkgrey"
-        if 30 <= pct7 < 50:
-            col = "orange"
-        if 0 <= pct7 < 30:
-            col = "red"
-        # The plot & player line
-        ax7 = sns.kdeplot(dfFilt[stat7], color=col, fill=col, ax=axes[1,2])
-        ax7.axvline(x7, 0, .95, lw=2.5, color=col)
-        ax7.set_title("Shot-Creating Actions: %.2f\n%i percentile" % (x7, pct7))
-        # Clean graph
-        ax7.set(xlabel=None)
-        ax7.set(ylabel=None)
-        ax7.set(yticks=[])
-
-        if pct8 >= 90:
-            col = "darkgreen"
-        if 70 <= pct8 < 90:
-            col = "yellowgreen"
-        if 50 <= pct8 < 70:
-            col = "darkgrey"
-        if 30 <= pct8 < 50:
-            col = "orange"
-        if 0 <= pct8 < 30:
-            col = "red"
-        # The plot & player line
-        ax8 = sns.kdeplot(dfFilt[stat8], color=col, fill=col, ax=axes[1,3])
-        ax8.axvline(x8, 0, .95, lw=2.5, color=col)
-        ax8.set_title("Goal-Creating Actions: %.2f\n%i percentile" % (x8, pct8))
-        # Clean graph
-        ax8.set(xlabel=None)
-        ax8.set(ylabel=None)
-        ax8.set(yticks=[])
-
-        if pct9 >= 90:
-            col = "darkgreen"
-        if 70 <= pct9 < 90:
-            col = "yellowgreen"
-        if 50 <= pct9 < 70:
-            col = "darkgrey"
-        if 30 <= pct9 < 50:
-            col = "orange"
-        if 0 <= pct9 < 30:
-            col = "red"
-        # The plot & player line
-        ax9 = sns.kdeplot(dfFilt[stat9], color=col, fill=col, ax=axes[2,0])
-        ax9.axvline(x9, 0, .95, lw=2.5, color=col)
-        ax9.set_title("Centrality (pct of squad's touches/90): %.1f%s\n%i percentile" % (x9,'%', pct9))
-        # Clean graph
-        ax9.set(xlabel=None)
-        ax9.set(ylabel=None)
-        ax9.set(yticks=[])
-
-        if pct10 >= 90:
-            col = "darkgreen"
-        if 70 <= pct10 < 90:
-            col = "yellowgreen"
-        if 50 <= pct10 < 70:
-            col = "darkgrey"
-        if 30 <= pct10 < 50:
-            col = "orange"
-        if 0 <= pct10 < 30:
-            col = "red"
-        # The plot & player line
-        ax10 = sns.kdeplot(dfFilt[stat10], color=col, fill=col, ax=axes[2,1])
-        ax10.axvline(x10, 0, .95, lw=2.5, color=col)
-        ax10.set_title("Progressive Passes: %.1f\n%i percentile" % (x10, pct10))
-        # Clean graph
-        ax10.set(xlabel=None)
-        ax10.set(ylabel=None)
-        ax10.set(yticks=[])
-
-        if pct11 >= 90:
-            col = "darkgreen"
-        if 70 <= pct11 < 90:
-            col = "yellowgreen"
-        if 50 <= pct11 < 70:
-            col = "darkgrey"
-        if 30 <= pct11 < 50:
-            col = "orange"
-        if 0 <= pct11 < 30:
-            col = "red"
-        # The plot & player line
-        ax11 = sns.kdeplot(dfFilt[stat11], color=col, fill=col, ax=axes[2,2])
-        ax11.axvline(x11, 0, .95, lw=2.5, color=col)
-        ax11.set_title("Tackles & Interceptions: %.1f\n%i percentile" % (x11, pct11))
-        # Clean graph
-        ax11.set(xlabel=None)
-        ax11.set(ylabel=None)
-        ax11.set(yticks=[])
-
-        if pct12 >= 90:
-            col = "darkgreen"
-        if 70 <= pct12 < 90:
-            col = "yellowgreen"
-        if 50 <= pct12 < 70:
-            col = "darkgrey"
-        if 30 <= pct12 < 50:
-            col = "orange"
-        if 0 <= pct12 < 30:
-            col = "red"
-        # The plot & player line
-        ax12 = sns.kdeplot(dfFilt[stat12], color=col, fill=col, ax=axes[2,3])
-        ax12.axvline(x12, 0, .95, lw=2.5, color=col)
-        ax12.set_title("Aerial Wins Pct: %.1f\n%i percentile" % (x12, pct12))
-        # Clean graph
-        ax12.set(xlabel=None)
-        ax12.set(ylabel=None)
-        ax12.set(yticks=[])
-
-        # Finish the graphs
-        sns.despine(left=True)
-        plt.subplots_adjust(hspace = 1)
-#         plt.suptitle('%s (%i, %s, %s) - All values except percentages are per 90 minutes.\n Compared to %s %ss, %i+ minutes | Data from StatsBomb(FBRef) | %s | Code by @BeGriffis'
-#                  % (playerName, int(age), teamName, ssn, Comp, player_pos, minutesPlayed, signature),
-#                  fontsize=16,
-#                 color="#4A2E19", fontweight="bold", fontname="DejaVu Sans")
-        plt.style.use("default")
-        
-        fig = plt.gcf()
-        
-        fig.patch.set_facecolor('#fbf9f4')
-        ax1.set_facecolor('#fbf9f4')
-        ax2.set_facecolor('#fbf9f4')
-        ax3.set_facecolor('#fbf9f4')
-        ax4.set_facecolor('#fbf9f4')
-        ax5.set_facecolor('#fbf9f4')
-        ax6.set_facecolor('#fbf9f4')
-        ax7.set_facecolor('#fbf9f4')
-        ax8.set_facecolor('#fbf9f4')
-        ax9.set_facecolor('#fbf9f4')
-        ax10.set_facecolor('#fbf9f4')
-        ax11.set_facecolor('#fbf9f4')
-        ax12.set_facecolor('#fbf9f4')
-        
-        fig.text(0.11, .05,
-                   'Red: Bottm 30%',
-                   fontsize=10, color='red')
-        fig.text(0.28, .05,
-                   'Orange: 30th to 50th percentile',
-                   fontsize=10, color='darkorange')
-        fig.text(0.4625, .05,
-                   'Grey: 50th to 70th percentile',
-                   fontsize=10, color='darkgrey')
-        fig.text(0.6575, .05,
-                   'Light Green: 70th to 90th percentile',
-                   fontsize=10, color='yellowgreen')
-        fig.text(0.845, .05,
-                   'Dark Green: Top 10%',
-                   fontsize=10, color='darkgreen')
-        
-        fig.text(0.11,-.01,
-                'All values except percentages are per 90 minutes\nCompared to %s %ss, %i+ minutes\nData from Opta via FBRef' %(Comp, player_pos, minutesPlayed),
-                fontsize=14, color='#4A2E19', va='top', ha='left')
-        fig.text(0.92,-.01,
-                '%s\n\nCreated: %s | Code by @BeGriffis' %(data_date, signature),
-                fontsize=14, color='#4A2E19', va='top', ha='right')
-        
-        fig.text(.5,1.0,
-                '%s (%i, %s, %s)' %(playerName, int(age), teamName, ssn),
-                fontsize=25, color="#4A2E19", fontweight="bold", va='center', ha='center')
-
-        
-        fig.set_size_inches(20, 10) #length, height
-        if saveinput == "y":
-            fig.savefig("%s%s %s fw.png" %(root, playerName, ssn), dpi=220, bbox_inches='tight')
-        print("Minutes: %i — %i percentile" %(minutes,pctMins))
-        fig = plt.gcf()
-        fig.set_size_inches(20, 10) #length, height
-        fig
-
-    def midfielders():
-        ##### MIDFIELDERS #####
-
-        f, axes = plt.subplots(3, 4, figsize=(30,10))
-
-        # Filter data
-        player = df[df['Player']==playerPrompt]
-        dfFilt = df[df['Min']>=minutesPlayed]
-        dfFilt = dfFilt[dfFilt['Pos'].str.contains(player_pos)]
-#         if ((player_pos == 'Goalkeeper') or
-#             (player_pos == 'Centre-Back') or
-#             (player_pos == 'Left-Back') or
-#             (player_pos == 'Right-Back') or
-#             (player_pos == 'Defensive Midfield') or
-#             (player_pos == 'Central Midfield') or
-#             (player_pos == 'Left Midfield') or
-#             (player_pos == 'Right Midfield') or
-#             (player_pos == 'Attacking Midfield') or
-#             (player_pos == 'Left Winger') or
-#             (player_pos == 'Right Winger') or
-#             (player_pos == 'Second Striker') or
-#             (player_pos == 'Centre-Forward')
-#            ):
-#             dfFilt = dfFilt[dfFilt['Main Position']==player_pos]
-#         if player_pos == 'Fullback':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Left-Back') |
-#                             (dfFilt['Main Position']=='Right-Back')]
-#         if player_pos == 'Midfielder':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Defensive Midfield') |
-#                             (dfFilt['Main Position']=='Central Midfield') |
-#                             (dfFilt['Main Position']=='Attacking Midfield')]
-#         if player_pos == 'Winger':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Right Midfield') |
-#                             (dfFilt['Main Position']=='Left Midfield') |
-#                             (dfFilt['Main Position']=='Left Winger') |
-#                             (dfFilt['Main Position']=='Right Winger')]
-#         if player_pos == 'Forward':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Centre-Forward') |
-#                             (dfFilt['Main Position']=='Second Striker') |
-#                             (dfFilt['Main Position']=='Left Winger') |
-#                             (dfFilt['Main Position']=='Right Winger')]
-            
-        if SquadPrompt != "":
-            player = player[player['Squad']==SquadPrompt]
-        if compP == "n":
-            dfFilt = dfFilt
-        if compP != "n":
-            dfFilt = dfFilt[dfFilt['Comp']==compP]
-#         if compP == "epl":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Premier League"]
-#         if compP == "bundesliga":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Bundesliga"]
-#         if compP == "la liga":
-#             dfFilt = dfFilt[dfFilt['Comp']=="La Liga"]
-#         if compP == "ligue 1":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Ligue 1"]
-#         if compP == "serie a":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Serie A"]
-        Comp = player['Comp'].values[0]
-
-        # Variables to be plotted
-        stat1 = "ShortPassCmp%"
-        stat2 = "MedPassCmp%"
-        stat3 = "LongPassCmp%"
-        stat4 = "KeyPassesPer90"
-        stat5 = "xAPer90"
-        stat6 = "AssistsPer90"
-        stat7 = "SCA90"
-        stat8 = "GCA90"
-        stat9 = "ProgPassesPer90"
-        stat10 = "pAdjIntPer90"
-        stat11 = "pAdjDrbTklPer90"
-        stat12 = "TouchCentrality"
-        
-        #Get the specific player's value (and name)
-        x1 = player[stat1].values[0]
-        x2 = player[stat2].values[0]
-        x3 = player[stat3].values[0]
-        x4 = player[stat4].values[0]
-        x5 = player[stat5].values[0]
-        x6 = player[stat6].values[0]
-        x7 = player[stat7].values[0]
-        x8 = player[stat8].values[0]
-        x9 = player[stat9].values[0]
-        x10 = player[stat10].values[0]
-        x11 = player[stat11].values[0]
-        x12 = player[stat12].values[0]
-        playerName = player["Player"].values[0]
-        teamName = player["Squad"].values[0]
-        str_age = player["Age"][:2]
-        age = str_age.values[0]
-        minutes = player['Min'].values[0]
-
-        # Calculate their percentile
-        pct1 = stats.percentileofscore(dfFilt[stat1],x1)
-        pct2 = stats.percentileofscore(dfFilt[stat2],x2)
-        pct3 = stats.percentileofscore(dfFilt[stat3],x3)
-        pct4 = stats.percentileofscore(dfFilt[stat4],x4)
-        pct5 = stats.percentileofscore(dfFilt[stat5],x5)
-        pct6 = stats.percentileofscore(dfFilt[stat6],x6)
-        pct7 = stats.percentileofscore(dfFilt[stat7],x7)
-        pct8 = stats.percentileofscore(dfFilt[stat8],x8)
-        pct9 = stats.percentileofscore(dfFilt[stat9],x9)
-        pct10 = stats.percentileofscore(dfFilt[stat10],x10)
-        pct11 = stats.percentileofscore(dfFilt[stat11],x11)
-        pct12 = stats.percentileofscore(dfFilt[stat12],x12)
-        pctMins = stats.percentileofscore(dfFilt['Min'],minutes)
-
-        if pct1 >= 90:
-            col = "darkgreen"
-        if 70 <= pct1 < 90:
-            col = "yellowgreen"
-        if 50 <= pct1 < 70:
-            col = "darkgrey"
-        if 30 <= pct1 < 50:
-            col = "orange"
-        if 0 <= pct1 < 30:
-            col = "red"
-        # The plot & player line
-        ax1 = sns.kdeplot(dfFilt[stat1], color=col, fill=col, ax=axes[0,0])
-        ax1.axvline(x1, 0, .95, lw=2.5, color=col)
-        ## Percentile lines
-        ax1.set_title("Short Pass Completion Pct: %.1f\n%i percentile" % (x1, pct1))
-        # Clean graph
-        ax1.set(xlabel=None)
-        ax1.set(ylabel=None)
-        ax1.set(yticks=[])
-
-        if pct2 >= 90:
-            col = "darkgreen"
-        if 70 <= pct2 < 90:
-            col = "yellowgreen"
-        if 50 <= pct2 < 70:
-            col = "darkgrey"
-        if 30 <= pct2 < 50:
-            col = "orange"
-        if 0 <= pct2 < 30:
-            col = "red"
-        # The plot & player line
-        ax2 = sns.kdeplot(dfFilt[stat2], color=col, fill=col, ax=axes[0,1])
-        ax2.axvline(x2, 0, .95, lw=2.5, color=col)
-        ax2.set_title("Medium Pass Completion Pct: %.1f\n%i percentile" % (x2, pct2))
-        # Clean graph
-        ax2.set(xlabel=None)
-        ax2.set(ylabel=None)
-        ax2.set(yticks=[])
-
-        if pct3 >= 90:
-            col = "darkgreen"
-        if 70 <= pct3 < 90:
-            col = "yellowgreen"
-        if 50 <= pct3 < 70:
-            col = "darkgrey"
-        if 30 <= pct3 < 50:
-            col = "orange"
-        if 0 <= pct3 < 30:
-            col = "red"
-        # The plot & player line
-        ax3 = sns.kdeplot(dfFilt[stat3], color=col, fill=col, ax=axes[0,2])
-        ax3.axvline(x3, 0, .95, lw=2.5, color=col)
-        ax3.set_title("Long Pass Completion Pct: %.1f\n%i percentile" % (x3, pct3))
-        # Clean graph
-        ax3.set(xlabel=None)
-        ax3.set(ylabel=None)
-        ax3.set(yticks=[])
-
-        if pct4 >= 90:
-            col = "darkgreen"
-        if 70 <= pct4 < 90:
-            col = "yellowgreen"
-        if 50 <= pct4 < 70:
-            col = "darkgrey"
-        if 30 <= pct4 < 50:
-            col = "orange"
-        if 0 <= pct4 < 30:
-            col = "red"
-        # The plot & player line
-        ax4 = sns.kdeplot(dfFilt[stat4], color=col, fill=col, ax=axes[0,3])
-        ax4.axvline(x4, 0, .95, lw=2.5, color=col)
-        ax4.set_title("Key Passes: %.1f\n%i percentile" % (x4, pct4))
-        # Clean graph
-        ax4.set(xlabel=None)
-        ax4.set(ylabel=None)
-        ax4.set(yticks=[])
-
-        if pct5 >= 90:
-            col = "darkgreen"
-        if 70 <= pct5 < 90:
-            col = "yellowgreen"
-        if 50 <= pct5 < 70:
-            col = "darkgrey"
-        if 30 <= pct5 < 50:
-            col = "orange"
-        if 0 <= pct5 < 30:
-            col = "red"
-        # The plot & player line
-        ax5 = sns.kdeplot(dfFilt[stat5], color=col, fill=col, ax=axes[1,0])
-        ax5.axvline(x5, 0, .95, lw=2.5, color=col)
-        ax5.set_title("xA: %.2f\n%i percentile" % (x5, pct5))
-        # Clean graph
-        ax5.set(xlabel=None)
-        ax5.set(ylabel=None)
-        ax5.set(yticks=[])
-
-        if pct6 >= 90:
-            col = "darkgreen"
-        if 70 <= pct6 < 90:
-            col = "yellowgreen"
-        if 50 <= pct6 < 70:
-            col = "darkgrey"
-        if 30 <= pct6 < 50:
-            col = "orange"
-        if 0 <= pct6 < 30:
-            col = "red"
-        # The plot & player line
-        ax6 = sns.kdeplot(dfFilt[stat6], color=col, fill=col, ax=axes[1,1])
-        ax6.axvline(x6, 0, .95, lw=2.5, color=col)
-        ax6.set_title("Assists: %.1f\n%i percentile" % (x6, pct6))
-        # Clean graph
-        ax6.set(xlabel=None)
-        ax6.set(ylabel=None)
-        ax6.set(yticks=[])
-
-        if pct7 >= 90:
-            col = "darkgreen"
-        if 70 <= pct7 < 90:
-            col = "yellowgreen"
-        if 50 <= pct7 < 70:
-            col = "darkgrey"
-        if 30 <= pct7 < 50:
-            col = "orange"
-        if 0 <= pct7 < 30:
-            col = "red"
-        # The plot & player line
-        ax7 = sns.kdeplot(dfFilt[stat7], color=col, fill=col, ax=axes[1,2])
-        ax7.axvline(x7, 0, .95, lw=2.5, color=col)
-        ax7.set_title("Shot-Creating Actions: %.1f\n%i percentile" % (x7, pct7))
-        # Clean graph
-        ax7.set(xlabel=None)
-        ax7.set(ylabel=None)
-        ax7.set(yticks=[])
-
-        if pct8 >= 90:
-            col = "darkgreen"
-        if 70 <= pct8 < 90:
-            col = "yellowgreen"
-        if 50 <= pct8 < 70:
-            col = "darkgrey"
-        if 30 <= pct8 < 50:
-            col = "orange"
-        if 0 <= pct8 < 30:
-            col = "red"
-        # The plot & player line
-        ax8 = sns.kdeplot(dfFilt[stat8], color=col, fill=col, ax=axes[1,3])
-        ax8.axvline(x8, 0, .95, lw=2.5, color=col)
-        ax8.set_title("Goal-Creating Actions: %.1f\n%i percentile" % (x8, pct8))
-        # Clean graph
-        ax8.set(xlabel=None)
-        ax8.set(ylabel=None)
-        ax8.set(yticks=[])
-
-        if pct9 >= 90:
-            col = "darkgreen"
-        if 70 <= pct9 < 90:
-            col = "yellowgreen"
-        if 50 <= pct9 < 70:
-            col = "darkgrey"
-        if 30 <= pct9 < 50:
-            col = "orange"
-        if 0 <= pct9 < 30:
-            col = "red"
-        # The plot & player line
-        ax9 = sns.kdeplot(dfFilt[stat9], color=col, fill=col, ax=axes[2,0])
-        ax9.axvline(x9, 0, .95, lw=2.5, color=col)
-        ax9.set_title("Progressive Passes: %.1f\n%i percentile" % (x9, pct9))
-        # Clean graph
-        ax9.set(xlabel=None)
-        ax9.set(ylabel=None)
-        ax9.set(yticks=[])
-
-        if pct10 >= 90:
-            col = "darkgreen"
-        if 70 <= pct10 < 90:
-            col = "yellowgreen"
-        if 50 <= pct10 < 70:
-            col = "darkgrey"
-        if 30 <= pct10 < 50:
-            col = "orange"
-        if 0 <= pct10 < 30:
-            col = "red"
-        # The plot & player line
-        ax10 = sns.kdeplot(dfFilt[stat10], color=col, fill=col, ax=axes[2,1])
-        ax10.axvline(x10, 0, .95, lw=2.5, color=col)
-        ax10.set_title("Interceptions (pAdj.): %.1f\n%i percentile" % (x10, pct10))
-        # Clean graph
-        ax10.set(xlabel=None)
-        ax10.set(ylabel=None)
-        ax10.set(yticks=[])
-
-        if pct11 >= 90:
-            col = "darkgreen"
-        if 70 <= pct11 < 90:
-            col = "yellowgreen"
-        if 50 <= pct11 < 70:
-            col = "darkgrey"
-        if 30 <= pct11 < 50:
-            col = "orange"
-        if 0 <= pct11 < 30:
-            col = "red"
-        # The plot & player line
-        ax11 = sns.kdeplot(dfFilt[stat11], color=col, fill=col, ax=axes[2,2])
-        ax11.axvline(x11, 0, .95, lw=2.5, color=col)
-        ax11.set_title("Tackles (pAdj.): %.1f\n%i percentile" % (x11, pct11))
-        # Clean graph
-        ax11.set(xlabel=None)
-        ax11.set(ylabel=None)
-        ax11.set(yticks=[])
-
-        if pct12 >= 90:
-            col = "darkgreen"
-        if 70 <= pct12 < 90:
-            col = "yellowgreen"
-        if 50 <= pct12 < 70:
-            col = "darkgrey"
-        if 30 <= pct12 < 50:
-            col = "orange"
-        if 0 <= pct12 < 30:
-            col = "red"
-        # The plot & player line
-        ax12 = sns.kdeplot(dfFilt[stat12], color=col, fill=col, ax=axes[2,3])
-        ax12.axvline(x12, 0, .95, lw=2.5, color=col)
-        ax12.set_title("Centrality (pct of squad's touches/90): %.1f%s\n%i percentile" % (x12, '%',pct12))
-        # Clean graph
-        ax12.set(xlabel=None)
-        ax12.set(ylabel=None)
-        ax12.set(yticks=[])
-
-        # Finish the graphs
-        sns.despine(left=True)
-        plt.subplots_adjust(hspace = 1)
-#         plt.suptitle('%s (%i, %s, %s) - All values except percentages are per 90 minutes. pAdj = Possession-Adjusted\n Compared to %s %ss, %i+ minutes | Data from StatsBomb(FBRef) | %s | Code by @BeGriffis'
-#                      % (playerName, int(age), teamName, ssn, Comp, player_pos, minutesPlayed, signature),
-#                      fontsize=16,
-#                     color="#4A2E19", fontweight="bold", fontname="DejaVu Sans")
-        plt.style.use("default")
-        #f.style.use("Solarize_Light2")
-
-        fig = plt.gcf()
-        
-        fig.patch.set_facecolor('#fbf9f4')
-        ax1.set_facecolor('#fbf9f4')
-        ax2.set_facecolor('#fbf9f4')
-        ax3.set_facecolor('#fbf9f4')
-        ax4.set_facecolor('#fbf9f4')
-        ax5.set_facecolor('#fbf9f4')
-        ax6.set_facecolor('#fbf9f4')
-        ax7.set_facecolor('#fbf9f4')
-        ax8.set_facecolor('#fbf9f4')
-        ax9.set_facecolor('#fbf9f4')
-        ax10.set_facecolor('#fbf9f4')
-        ax11.set_facecolor('#fbf9f4')
-        ax12.set_facecolor('#fbf9f4')
-        
-        fig.text(0.11, .05,
-                   'Red: Bottm 30%',
-                   fontsize=10, color='red')
-        fig.text(0.28, .05,
-                   'Orange: 30th to 50th percentile',
-                   fontsize=10, color='orange')
-        fig.text(0.4625, .05,
-                   'Grey: 50th to 70th percentile',
-                   fontsize=10, color='darkgrey')
-        fig.text(0.6575, .05,
-                   'Light Green: 70th to 90th percentile',
-                   fontsize=10, color='yellowgreen')
-        fig.text(0.845, .05,
-                   'Dark Green: Top 10%',
-                   fontsize=10, color='darkgreen')
-        
-        fig.text(0.11,-.01,
-                'All values except percentages are per 90 minutes\nCompared to %s %ss, %i+ minutes\nData from Opta via FBRef' %(Comp, player_pos, minutesPlayed),
-                fontsize=14, color='#4A2E19', va='top', ha='left')
-        fig.text(0.92,-.01,
-                '%s\n\nCreated: %s | Code by @BeGriffis' %(data_date, signature),
-                fontsize=14, color='#4A2E19', va='top', ha='right')
-        
-        fig.text(.5,1.0,
-                '%s (%i, %s, %s)' %(playerName, int(age), teamName, ssn),
-                fontsize=25, color="#4A2E19", fontweight="bold", va='center', ha='center')
-
-
-        fig.set_size_inches(20, 10) #length, height
-#         saveinput = input("Save figure? y/n ")
-        if saveinput == "y":
-            fig.savefig("%s%s %s mf.png" %(root, playerName, ssn), dpi=220, bbox_inches='tight')
-        print("Minutes: %i — %i percentile" %(minutes,pctMins))
-        fig = plt.gcf()
-        fig.set_size_inches(20, 10) #length, height
-        fig
-
-    def defenders():
-        ##### DEFENDERS #####
-
-        f, axes = plt.subplots(3, 4, figsize=(30,10))
-
-        # Variables to be plotted
-        stat1 = "pAdjDrbTklPer90"
-        stat2 = "pAdjTklWinPossPer90"
-        stat3 = "DrbTkl%"
-        stat4 = "Tkl+IntPer600OppTouch"
-        stat5 = "pAdjClrPer90"
-        stat6 = "pAdjShBlocksPer90"
-        stat7 = "pAdjIntPer90"
-        stat8 = "AerialWin%"
-        stat9 = "LongPassCmp%"
-        stat10 = "SCA90"
-        stat11 = "ProgPassesPer90"
-        stat12 = "TouchCentrality"
-        # Filter data
-        player = df[df['Player']==playerPrompt]
-        dfFilt = df[df['Min']>=minutesPlayed]
-        dfFilt = dfFilt[dfFilt['Pos']==player_pos]
-#         if ((player_pos == 'Goalkeeper') or
-#             (player_pos == 'Centre-Back') or
-#             (player_pos == 'Left-Back') or
-#             (player_pos == 'Right-Back') or
-#             (player_pos == 'Defensive Midfield') or
-#             (player_pos == 'Central Midfield') or
-#             (player_pos == 'Left Midfield') or
-#             (player_pos == 'Right Midfield') or
-#             (player_pos == 'Attacking Midfield') or
-#             (player_pos == 'Left Winger') or
-#             (player_pos == 'Right Winger') or
-#             (player_pos == 'Second Striker') or
-#             (player_pos == 'Centre-Forward')
-#            ):
-#             dfFilt = dfFilt[dfFilt['Main Position']==player_pos]
-#         if player_pos == 'Fullback':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Left-Back') |
-#                             (dfFilt['Main Position']=='Right-Back')]
-#         if player_pos == 'Midfielder':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Defensive Midfield') |
-#                             (dfFilt['Main Position']=='Central Midfield') |
-#                             (dfFilt['Main Position']=='Attacking Midfield')]
-#         if player_pos == 'Winger':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Right Midfield') |
-#                             (dfFilt['Main Position']=='Left Midfield') |
-#                             (dfFilt['Main Position']=='Left Winger') |
-#                             (dfFilt['Main Position']=='Right Winger')]
-#         if player_pos == 'Forward':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Centre-Forward') |
-#                             (dfFilt['Main Position']=='Second Striker') |
-#                             (dfFilt['Main Position']=='Left Winger') |
-#                             (dfFilt['Main Position']=='Right Winger')]
-            
-        if SquadPrompt != "":
-            player = player[player['Squad']==SquadPrompt]
-        if compP == "n":
-            dfFilt = dfFilt
-        else:
-            dfFilt = dfFilt[dfFilt['Comp']==compP]
-#         if compP == "epl":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Premier League"]
-#         if compP == "bundesliga":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Bundesliga"]
-#         if compP == "la liga":
-#             dfFilt = dfFilt[dfFilt['Comp']=="La Liga"]
-#         if compP == "ligue 1":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Ligue 1"]
-#         if compP == "serie a":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Serie A"]
-        Comp = player['Comp'].values[0]
-
-        #Get the specific player's value (and name)
-        x1 = player[stat1].values[0]
-        x2 = player[stat2].values[0]
-        x3 = player[stat3].values[0]
-        x4 = player[stat4].values[0]
-        x5 = player[stat5].values[0]
-        x6 = player[stat6].values[0]
-        x7 = player[stat7].values[0]
-        x8 = player[stat8].values[0]
-        x9 = player[stat9].values[0]
-        x10 = player[stat10].values[0]
-        x11 = player[stat11].values[0]
-        x12 = player[stat12].values[0]
-        playerName = player["Player"].values[0]
-        teamName = player["Squad"].values[0]
-        str_age = player["Age"][:2]
-        age = str_age.values[0]
-        minutes = player['Min'].values[0]
-
-        # Calculate their percentile
-        pct1 = stats.percentileofscore(dfFilt[stat1],x1)
-        pct2 = stats.percentileofscore(dfFilt[stat2],x2)
-        pct3 = stats.percentileofscore(dfFilt[stat3],x3)
-        pct4 = stats.percentileofscore(dfFilt[stat4],x4)
-        pct5 = stats.percentileofscore(dfFilt[stat5],x5)
-        pct6 = stats.percentileofscore(dfFilt[stat6],x6)
-        pct7 = stats.percentileofscore(dfFilt[stat7],x7)
-        pct8 = stats.percentileofscore(dfFilt[stat8],x8)
-        pct9 = stats.percentileofscore(dfFilt[stat9],x9)
-        pct10 = stats.percentileofscore(dfFilt[stat10],x10)
-        pct11 = stats.percentileofscore(dfFilt[stat11],x11)
-        pct12 = stats.percentileofscore(dfFilt[stat12],x12)
-        pctMins = stats.percentileofscore(dfFilt['Min'],minutes)
-        
-
-        if pct1 >= 90:
-            col = "darkgreen"
-        if 70 <= pct1 < 90:
-            col = "yellowgreen"
-        if 50 <= pct1 < 70:
-            col = "darkgrey"
-        if 30 <= pct1 < 50:
-            col = "orange"
-        if 0 <= pct1 < 30:
-            col = "red"
-        # The plot & player line
-        ax1 = sns.kdeplot(dfFilt[stat1], color=col, fill=col, ax=axes[0,0])
-        ax1.axvline(x1, 0, .95, lw=2.5, color=col)
-        ## Percentile lines
-        ax1.set_title("Tackles Won (pAdj.): %.1f\n%i percentile" % (x1, pct1))
-        # Clean graph
-        ax1.set(xlabel=None)
-        ax1.set(ylabel=None)
-        ax1.set(yticks=[])
-
-        if pct2 >= 90:
-            col = "darkgreen"
-        if 70 <= pct2 < 90:
-            col = "yellowgreen"
-        if 50 <= pct2 < 70:
-            col = "darkgrey"
-        if 30 <= pct2 < 50:
-            col = "orange"
-        if 0 <= pct2 < 30:
-            col = "red"
-        # The plot & player line
-        ax2 = sns.kdeplot(dfFilt[stat2], color=col, fill=col, ax=axes[0,1])
-        ax2.axvline(x2, 0, .95, lw=2.5, color=col)
-        ax2.set_title("Tackles Winning Possession (pAdj.): %.1f\n%i percentile" % (x2, pct2))
-        # Clean graph
-        ax2.set(xlabel=None)
-        ax2.set(ylabel=None)
-        ax2.set(yticks=[])
-
-        if pct3 >= 90:
-            col = "darkgreen"
-        if 70 <= pct3 < 90:
-            col = "yellowgreen"
-        if 50 <= pct3 < 70:
-            col = "darkgrey"
-        if 30 <= pct3 < 50:
-            col = "orange"
-        if 0 <= pct3 < 30:
-            col = "red"
-        # The plot & player line
-        ax3 = sns.kdeplot(dfFilt[stat3], color=col, fill=col, ax=axes[0,2])
-        ax3.axvline(x3, 0, .95, lw=2.5, color=col)
-        ax3.set_title("Tackle Win Pct: %.1f\n%i percentile" % (x3, pct3))
-        # Clean graph
-        ax3.set(xlabel=None)
-        ax3.set(ylabel=None)
-        ax3.set(yticks=[])
-
-        if pct4 >= 90:
-            col = "darkgreen"
-        if 70 <= pct4 < 90:
-            col = "yellowgreen"
-        if 50 <= pct4 < 70:
-            col = "darkgrey"
-        if 30 <= pct4 < 50:
-            col = "orange"
-        if 0 <= pct4 < 30:
-            col = "red"
-        # The plot & player line
-        ax4 = sns.kdeplot(dfFilt[stat4], color=col, fill=col, ax=axes[0,3])
-        ax4.axvline(x4, 0, .95, lw=2.5, color=col)
-        ax4.set_title("Tkls & Ints per 600 Opp. Touches: %.1f\n%i percentile" % (x4, pct4))
-        # Clean graph
-        ax4.set(xlabel=None)
-        ax4.set(ylabel=None)
-        ax4.set(yticks=[])
-
-        if pct5 >= 90:
-            col = "darkgreen"
-        if 70 <= pct5 < 90:
-            col = "yellowgreen"
-        if 50 <= pct5 < 70:
-            col = "darkgrey"
-        if 30 <= pct5 < 50:
-            col = "orange"
-        if 0 <= pct5 < 30:
-            col = "red"
-        # The plot & player line
-        ax5 = sns.kdeplot(dfFilt[stat5], color=col, fill=col, ax=axes[1,0])
-        ax5.axvline(x5, 0, .95, lw=2.5, color=col)
-        ax5.set_title("Clearances (pAdj.): %.1f\n%i percentile" % (x5, pct5))
-        # Clean graph
-        ax5.set(xlabel=None)
-        ax5.set(ylabel=None)
-        ax5.set(yticks=[])
-
-        if pct6 >= 90:
-            col = "darkgreen"
-        if 70 <= pct6 < 90:
-            col = "yellowgreen"
-        if 50 <= pct6 < 70:
-            col = "darkgrey"
-        if 30 <= pct6 < 50:
-            col = "orange"
-        if 0 <= pct6 < 30:
-            col = "red"
-        # The plot & player line
-        ax6 = sns.kdeplot(dfFilt[stat6], color=col, fill=col, ax=axes[1,1])
-        ax6.axvline(x6, 0, .95, lw=2.5, color=col)
-        ax6.set_title("Shot Blocks (pAdj.): %.1f\n%i percentile" % (x6, pct6))
-        # Clean graph
-        ax6.set(xlabel=None)
-        ax6.set(ylabel=None)
-        ax6.set(yticks=[])
-
-        if pct7 >= 90:
-            col = "darkgreen"
-        if 70 <= pct7 < 90:
-            col = "yellowgreen"
-        if 50 <= pct7 < 70:
-            col = "darkgrey"
-        if 30 <= pct7 < 50:
-            col = "orange"
-        if 0 <= pct7 < 30:
-            col = "red"
-        # The plot & player line
-        ax7 = sns.kdeplot(dfFilt[stat7], color=col, fill=col, ax=axes[1,2])
-        ax7.axvline(x7, 0, .95, lw=2.5, color=col)
-        ax7.set_title("Interceptions (pAdj.): %.1f\n%i percentile" % (x7, pct7))
-        # Clean graph
-        ax7.set(xlabel=None)
-        ax7.set(ylabel=None)
-        ax7.set(yticks=[])
-
-        if pct8 >= 90:
-            col = "darkgreen"
-        if 70 <= pct8 < 90:
-            col = "yellowgreen"
-        if 50 <= pct8 < 70:
-            col = "darkgrey"
-        if 30 <= pct8 < 50:
-            col = "orange"
-        if 0 <= pct8 < 30:
-            col = "red"
-        # The plot & player line
-        ax8 = sns.kdeplot(dfFilt[stat8], color=col, fill=col, ax=axes[1,3])
-        ax8.axvline(x8, 0, .95, lw=2.5, color=col)
-        ax8.set_title("Aerial Win Pct: %.1f\n%i percentile" % (x8, pct8))
-        # Clean graph
-        ax8.set(xlabel=None)
-        ax8.set(ylabel=None)
-        ax8.set(yticks=[])
-
-        if pct9 >= 90:
-            col = "darkgreen"
-        if 70 <= pct9 < 90:
-            col = "yellowgreen"
-        if 50 <= pct9 < 70:
-            col = "darkgrey"
-        if 30 <= pct9 < 50:
-            col = "orange"
-        if 0 <= pct9 < 30:
-            col = "red"
-        # The plot & player line
-        ax9 = sns.kdeplot(dfFilt[stat9], color=col, fill=col, ax=axes[2,0])
-        ax9.axvline(x9, 0, .95, lw=2.5, color=col)
-        ax9.set_title("Long Pass Completion Pct: %.1f\n%i percentile" % (x9, pct9))
-        # Clean graph
-        ax9.set(xlabel=None)
-        ax9.set(ylabel=None)
-        ax9.set(yticks=[])
-
-        if pct10 >= 90:
-            col = "darkgreen"
-        if 70 <= pct10 < 90:
-            col = "yellowgreen"
-        if 50 <= pct10 < 70:
-            col = "darkgrey"
-        if 30 <= pct10 < 50:
-            col = "orange"
-        if 0 <= pct10 < 30:
-            col = "red"
-        # The plot & player line
-        ax10 = sns.kdeplot(dfFilt[stat10], color=col, fill=col, ax=axes[2,1])
-        ax10.axvline(x10, 0, .95, lw=2.5, color=col)
-        ax10.set_title("Shot-Creating Actions: %.1f\n%i percentile" % (x10, pct10))
-        # Clean graph
-        ax10.set(xlabel=None)
-        ax10.set(ylabel=None)
-        ax10.set(yticks=[])
-
-        if pct11 >= 90:
-            col = "darkgreen"
-        if 70 <= pct11 < 90:
-            col = "yellowgreen"
-        if 50 <= pct11 < 70:
-            col = "darkgrey"
-        if 30 <= pct11 < 50:
-            col = "orange"
-        if 0 <= pct11 < 30:
-            col = "red"
-        # The plot & player line
-        ax11 = sns.kdeplot(dfFilt[stat11], color=col, fill=col, ax=axes[2,2])
-        ax11.axvline(x11, 0, .95, lw=2.5, color=col)
-        ax11.set_title("Progressive Passes: %.1f\n%i percentile" % (x11, pct11))
-        # Clean graph
-        ax11.set(xlabel=None)
-        ax11.set(ylabel=None)
-        ax11.set(yticks=[])
-
-        if pct12 >= 90:
-            col = "darkgreen"
-        if 70 <= pct12 < 90:
-            col = "yellowgreen"
-        if 50 <= pct12 < 70:
-            col = "darkgrey"
-        if 30 <= pct12 < 50:
-            col = "orange"
-        if 0 <= pct12 < 30:
-            col = "red"
-        # The plot & player line
-        ax12 = sns.kdeplot(dfFilt[stat12], color=col, fill=col, ax=axes[2,3])
-        ax12.axvline(x12, 0, .95, lw=2.5, color=col)
-        ax12.set_title("Centrality (pct of squad's touches/90): %.1f%s\n%i percentile" % (x12,'%', pct12))
-        # Clean graph
-        ax12.set(xlabel=None)
-        ax12.set(ylabel=None)
-        ax12.set(yticks=[])
-
-        # Finish the graphs
-        sns.despine(left=True)
-        plt.subplots_adjust(hspace = 1)
-#         plt.suptitle('%s (%i, %s, %s) - All values except percentages are per 90 minutes. pAdj = Possession-Adjusted\n Compared to %s %ss, %i+ minutes | Data from StatsBomb(FBRef) | Code by @BeGriffis | Created: %s'
-#                      % (playerName, int(age), teamName, ssn, Comp, player_pos, minutesPlayed, signature),
-#                      fontsize=16,
-#                     color="#4A2E19", fontweight="bold", fontname="DejaVu Sans")
-        plt.style.use("default")
-
-        fig = plt.gcf()
-        
-        fig.patch.set_facecolor('#fbf9f4')
-        ax1.set_facecolor('#fbf9f4')
-        ax2.set_facecolor('#fbf9f4')
-        ax3.set_facecolor('#fbf9f4')
-        ax4.set_facecolor('#fbf9f4')
-        ax5.set_facecolor('#fbf9f4')
-        ax6.set_facecolor('#fbf9f4')
-        ax7.set_facecolor('#fbf9f4')
-        ax8.set_facecolor('#fbf9f4')
-        ax9.set_facecolor('#fbf9f4')
-        ax10.set_facecolor('#fbf9f4')
-        ax11.set_facecolor('#fbf9f4')
-        ax12.set_facecolor('#fbf9f4')
-        
-        fig.text(0.11, .05,
-                   'Red: Bottm 30%',
-                   fontsize=10, color='red')
-        fig.text(0.28, .05,
-                   'Orange: 30th to 50th percentile',
-                   fontsize=10, color='orange')
-        fig.text(0.4625, .05,
-                   'Grey: 50th to 70th percentile',
-                   fontsize=10, color='darkgrey')
-        fig.text(0.6575, .05,
-                   'Light Green: 70th to 90th percentile',
-                   fontsize=10, color='yellowgreen')
-        fig.text(0.845, .05,
-                   'Dark Green: Top 10%',
-                   fontsize=10, color='darkgreen')
-        
-        fig.text(0.11,-.01,
-                'All values except percentages are per 90 minutes\nCompared to %s %ss, %i+ minutes\nData from Opta via FBRef' %(Comp, player_pos, minutesPlayed),
-                fontsize=14, color='#4A2E19', va='top', ha='left')
-        fig.text(0.92,-.01,
-                '%s\n\nCreated: %s | Code by @BeGriffis' %(data_date, signature),
-                fontsize=14, color='#4A2E19', va='top', ha='right')
-        
-        fig.text(.5,1.0,
-                '%s (%i, %s, %s)' %(playerName, int(age), teamName, ssn),
-                fontsize=25, color="#4A2E19", fontweight="bold", va='center', ha='center')
-        
-        fig.set_size_inches(20, 10) #length, height
-#         saveinput = input("Save figure? y/n ")
-        if saveinput == "y":
-            fig.savefig("%s%s %s df.png" %(root, playerName, ssn), dpi=220, bbox_inches='tight')
-        print("Minutes: %i — %i percentile" %(minutes,pctMins))
-        fig = plt.gcf()
-        fig.set_size_inches(20, 10) #length, height
-        fig
-
-    def goalkeepers():
-        ##### GOALKEEPERS #####
-
-        f, axes = plt.subplots(3, 4, figsize=(30,10))
-
-        # Variables to be plotted
-        stat1 = "GAPer90"
-        stat2 = "PSxG+/-"
-        stat3 = "PSxG/SoT"
-        stat4 = "Save%"
-        stat5 = "CS%"
-        stat6 = "RecovPer90"
-        stat7 = "CrsStp%"
-        stat8 = "PassAtt"
-        stat9 = "LaunchPassCmp%"
-        stat10 = "AvgLen"
-        stat11 = "#OPA/90"
-        stat12 = "AvgDistOPA"
-        # Filter data
-        player = df[df['Player']==playerPrompt]
-        dfFilt = df[df['Min']>=minutesPlayed]
-        dfFilt = dfFilt[dfFilt['Pos']==player_pos]
-#         if ((player_pos == 'Goalkeeper') or
-#             (player_pos == 'Centre-Back') or
-#             (player_pos == 'Left-Back') or
-#             (player_pos == 'Right-Back') or
-#             (player_pos == 'Defensive Midfield') or
-#             (player_pos == 'Central Midfield') or
-#             (player_pos == 'Left Midfield') or
-#             (player_pos == 'Right Midfield') or
-#             (player_pos == 'Attacking Midfield') or
-#             (player_pos == 'Left Winger') or
-#             (player_pos == 'Right Winger') or
-#             (player_pos == 'Second Striker') or
-#             (player_pos == 'Centre-Forward')
-#            ):
-#             dfFilt = dfFilt[dfFilt['Main Position']==player_pos]
-#         if player_pos == 'Fullback':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Left-Back') |
-#                             (dfFilt['Main Position']=='Right-Back')]
-#         if player_pos == 'Midfielder':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Defensive Midfield') |
-#                             (dfFilt['Main Position']=='Central Midfield') |
-#                             (dfFilt['Main Position']=='Attacking Midfield')]
-#         if player_pos == 'Winger':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Right Midfield') |
-#                             (dfFilt['Main Position']=='Left Midfield') |
-#                             (dfFilt['Main Position']=='Left Winger') |
-#                             (dfFilt['Main Position']=='Right Winger')]
-#         if player_pos == 'Forward':
-#             dfFilt = dfFilt[(dfFilt['Main Position']=='Centre-Forward') |
-#                             (dfFilt['Main Position']=='Second Striker') |
-#                             (dfFilt['Main Position']=='Left Winger') |
-#                             (dfFilt['Main Position']=='Right Winger')]
-            
-        if SquadPrompt != "":
-            player = player[player['Squad']==SquadPrompt]
-        if compP == "n":
-            dfFilt = dfFilt
-        else:
-            dfFilt = dfFilt[dfFilt['Comp']==compP]
-#         if compP == "epl":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Premier League"]
-#         if compP == "bundesliga":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Bundesliga"]
-#         if compP == "la liga":
-#             dfFilt = dfFilt[dfFilt['Comp']=="La Liga"]
-#         if compP == "ligue 1":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Ligue 1"]
-#         if compP == "serie a":
-#             dfFilt = dfFilt[dfFilt['Comp']=="Serie A"]
-        Comp = player['Comp'].values[0]
-
-        #Get the specific player's value (and name)
-        x1 = player[stat1].values[0]
-        x2 = player[stat2].values[0]
-        x3 = player[stat3].values[0]
-        x4 = player[stat4].values[0]
-        x5 = player[stat5].values[0]
-        x6 = player[stat6].values[0]
-        x7 = player[stat7].values[0]
-        x8 = player[stat8].values[0]
-        x9 = player[stat9].values[0]
-        x10 = player[stat10].values[0]
-        x11 = player[stat11].values[0]
-        x12 = player[stat12].values[0]
-        playerName = player["Player"].values[0]
-        teamName = player["Squad"].values[0]
-        str_age = player["Age"][:2]
-        age = str_age.values[0]
-        minutes = player['Min'].values[0]
-
-        # Calculate their percentile
-        pct1 = 100-stats.percentileofscore(dfFilt[stat1],x1)
-        pct2 = stats.percentileofscore(dfFilt[stat2],x2)
-        pct3 = stats.percentileofscore(dfFilt[stat3],x3)
-        pct4 = stats.percentileofscore(dfFilt[stat4],x4)
-        pct5 = stats.percentileofscore(dfFilt[stat5],x5)
-        pct6 = stats.percentileofscore(dfFilt[stat6],x6)
-        pct7 = stats.percentileofscore(dfFilt[stat7],x7)
-        pct8 = stats.percentileofscore(dfFilt[stat8],x8)
-        pct9 = stats.percentileofscore(dfFilt[stat9],x9)
-        pct10 = stats.percentileofscore(dfFilt[stat10],x10)
-        pct11 = stats.percentileofscore(dfFilt[stat11],x11)
-        pct12 = stats.percentileofscore(dfFilt[stat12],x12)
-
-        if pct1 >= 90:
-            col = "darkgreen"
-        if 70 <= pct1 < 90:
-            col = "yellowgreen"
-        if 50 <= pct1 < 70:
-            col = "darkgrey"
-        if 30 <= pct1 < 50:
-            col = "orange"
-        if 0 <= pct1 < 30:
-            col = "red"
-        # The plot & player line
-        ax1 = sns.kdeplot(dfFilt[stat1], color=col, fill=col, ax=axes[0,0])
-        ax1.axvline(x1, 0, .95, lw=2.5, color=col)
-        ax1.set_title("Goals Against: %.1f\n%i percentile" % (x1, pct1))
-        # Clean graph
-        ax1.set(xlabel=None)
-        ax1.set(ylabel=None)
-        ax1.set(yticks=[])
-
-        if pct2 >= 90:
-            col = "darkgreen"
-        if 70 <= pct2 < 90:
-            col = "yellowgreen"
-        if 50 <= pct2 < 70:
-            col = "darkgrey"
-        if 30 <= pct2 < 50:
-            col = "orange"
-        if 0 <= pct2 < 30:
-            col = "red"
-        # The plot & player line
-        ax2 = sns.kdeplot(dfFilt[stat2], color=col, fill=col, ax=axes[0,1])
-        ax2.axvline(x2, 0, .95, lw=2.5, color=col)
-        ax2.set_title("Post-Shot xG - Goals (not per90): %.2f\n%i percentile" % (x2, pct2))
-        # Clean graph
-        ax2.set(xlabel=None)
-        ax2.set(ylabel=None)
-        ax2.set(yticks=[])
-
-        if pct3 >= 90:
-            col = "darkgreen"
-        if 70 <= pct3 < 90:
-            col = "yellowgreen"
-        if 50 <= pct3 < 70:
-            col = "darkgrey"
-        if 30 <= pct3 < 50:
-            col = "orange"
-        if 0 <= pct3 < 30:
-            col = "red"
-        # The plot & player line
-        ax3 = sns.kdeplot(dfFilt[stat3], color=col, fill=col, ax=axes[0,2])
-        ax3.axvline(x3, 0, .95, lw=2.5, color=col)
-        ax3.set_title("Post-Shot xG/SoT Faced: %.1f\n%i percentile" % (x3, pct3))
-        # Clean graph
-        ax3.set(xlabel=None)
-        ax3.set(ylabel=None)
-        ax3.set(yticks=[])
-
-        if pct4 >= 90:
-            col = "darkgreen"
-        if 70 <= pct4 < 90:
-            col = "yellowgreen"
-        if 50 <= pct4 < 70:
-            col = "darkgrey"
-        if 30 <= pct4 < 50:
-            col = "orange"
-        if 0 <= pct4 < 30:
-            col = "red"
-        # The plot & player line
-        ax4 = sns.kdeplot(dfFilt[stat4], color=col, fill=col, ax=axes[0,3])
-        ax4.axvline(x4, 0, .95, lw=2.5, color=col)
-        ax4.set_title("Save Pct: %.1f\n%i percentile" % (x4, pct4))
-        # Clean graph
-        ax4.set(xlabel=None)
-        ax4.set(ylabel=None)
-        ax4.set(yticks=[])
-
-        if pct5 >= 90:
-            col = "darkgreen"
-        if 70 <= pct5 < 90:
-            col = "yellowgreen"
-        if 50 <= pct5 < 70:
-            col = "darkgrey"
-        if 30 <= pct5 < 50:
-            col = "orange"
-        if 0 <= pct5 < 30:
-            col = "red"
-        # The plot & player line
-        ax5 = sns.kdeplot(dfFilt[stat5], color=col, fill=col, ax=axes[1,0])
-        ax5.axvline(x5, 0, .95, lw=2.5, color=col)
-        ax5.set_title("Clean Sheet Pct: %.1f\n%i percentile" % (x5, pct5))
-        # Clean graph
-        ax5.set(xlabel=None)
-        ax5.set(ylabel=None)
-        ax5.set(yticks=[])
-
-        if pct6 >= 90:
-            col = "darkgreen"
-        if 70 <= pct6 < 90:
-            col = "yellowgreen"
-        if 50 <= pct6 < 70:
-            col = "darkgrey"
-        if 30 <= pct6 < 50:
-            col = "orange"
-        if 0 <= pct6 < 30:
-            col = "red"
-        # The plot & player line
-        ax6 = sns.kdeplot(dfFilt[stat6], color=col, fill=col, ax=axes[1,1])
-        ax6.axvline(x6, 0, .95, lw=2.5, color=col)
-        ax6.set_title("Loose Ball Recoveries: %.1f\n%i percentile" % (x6, pct6))
-        # Clean graph
-        ax6.set(xlabel=None)
-        ax6.set(ylabel=None)
-        ax6.set(yticks=[])
-
-        if pct7 >= 90:
-            col = "darkgreen"
-        if 70 <= pct7 < 90:
-            col = "yellowgreen"
-        if 50 <= pct7 < 70:
-            col = "darkgrey"
-        if 30 <= pct7 < 50:
-            col = "orange"
-        if 0 <= pct7 < 30:
-            col = "red"
-        # The plot & player line
-        ax7 = sns.kdeplot(dfFilt[stat7], color=col, fill=col, ax=axes[1,2])
-        ax7.axvline(x7, 0, .95, lw=2.5, color=col)
-        ax7.set_title("Crosses Stopped Pct: %.1f\n%i percentile" % (x7, pct7))
-        # Clean graph
-        ax7.set(xlabel=None)
-        ax7.set(ylabel=None)
-        ax7.set(yticks=[])
-
-        if pct8 >= 90:
-            col = "darkgreen"
-        if 70 <= pct8 < 90:
-            col = "yellowgreen"
-        if 50 <= pct8 < 70:
-            col = "darkgrey"
-        if 30 <= pct8 < 50:
-            col = "orange"
-        if 0 <= pct8 < 30:
-            col = "red"
-        # The plot & player line
-        ax8 = sns.kdeplot(dfFilt[stat8], color=col, fill=col, ax=axes[1,3])
-        ax8.axvline(x8, 0, .95, lw=2.5, color=col)
-        ax8.set_title("Passes Attempted: %.1f\n%i percentile" % (x8, pct8))
-        # Clean graph
-        ax8.set(xlabel=None)
-        ax8.set(ylabel=None)
-        ax8.set(yticks=[])
-
-        if pct9 >= 90:
-            col = "darkgreen"
-        if 70 <= pct9 < 90:
-            col = "yellowgreen"
-        if 50 <= pct9 < 70:
-            col = "darkgrey"
-        if 30 <= pct9 < 50:
-            col = "orange"
-        if 0 <= pct9 < 30:
-            col = "red"
-        # The plot & player line
-        ax9 = sns.kdeplot(dfFilt[stat9], color=col, fill=col, ax=axes[2,0])
-        ax9.axvline(x9, 0, .95, lw=2.5, color=col)
-        ax9.set_title("Launched Pass Completion Pct: %.1f\n%i percentile" % (x9, pct9))
-        # Clean graph
-        ax9.set(xlabel=None)
-        ax9.set(ylabel=None)
-        ax9.set(yticks=[])
-
-        if pct10 >= 90:
-            col = "darkgreen"
-        if 70 <= pct10 < 90:
-            col = "yellowgreen"
-        if 50 <= pct10 < 70:
-            col = "darkgrey"
-        if 30 <= pct10 < 50:
-            col = "orange"
-        if 0 <= pct10 < 30:
-            col = "red"
-        # The plot & player line
-        ax10 = sns.kdeplot(dfFilt[stat10], color=col, fill=col, ax=axes[2,1])
-        ax10.axvline(x10, 0, .95, lw=2.5, color=col)
-        ax10.set_title("Avg Length of Goal Kicks (yds): %.1f\n%i percentile" % (x10, pct10))
-        # Clean graph
-        ax10.set(xlabel=None)
-        ax10.set(ylabel=None)
-        ax10.set(yticks=[])
-
-        if pct11 >= 90:
-            col = "darkgreen"
-        if 70 <= pct11 < 90:
-            col = "yellowgreen"
-        if 50 <= pct11 < 70:
-            col = "darkgrey"
-        if 30 <= pct11 < 50:
-            col = "orange"
-        if 0 <= pct11 < 30:
-            col = "red"
-        # The plot & player line
-        ax11 = sns.kdeplot(dfFilt[stat11], color=col, fill=col, ax=axes[2,2])
-        ax11.axvline(x11, 0, .95, lw=2.5, color=col)
-        ax11.set_title("Defensive Actions Outside Box: %.2f\n%i percentile" % (x11, pct11))
-        # Clean graph
-        ax11.set(xlabel=None)
-        ax11.set(ylabel=None)
-        ax11.set(yticks=[])
-
-        if pct12 >= 90:
-            col = "darkgreen"
-        if 70 <= pct12 < 90:
-            col = "yellowgreen"
-        if 50 <= pct12 < 70:
-            col = "darkgrey"
-        if 30 <= pct12 < 50:
-            col = "orange"
-        if 0 <= pct12 < 30:
-            col = "red"
-        # The plot & player line
-        ax12 = sns.kdeplot(dfFilt[stat12], color=col, fill=col, ax=axes[2,3])
-        ax12.axvline(x12, 0, .95, lw=2.5, color=col)
-        ax12.set_title("Avg Dist. of Def. Actions Outside Box (yds): %.1f\n%i percentile" % (x12, pct12))
-        # Clean graph
-        ax12.set(xlabel=None)
-        ax12.set(ylabel=None)
-        ax12.set(yticks=[])
-
-        # Finish the graphs
-        sns.despine(left=True)
-        plt.subplots_adjust(hspace = 1)
-#         plt.suptitle('%s (%i, %s, %s) - All values except percentages & distance are per 90 minutes.\n Compared to %s %ss, %i+ minutes | Data from StatsBomb(FBRef) | %s | Code by @BeGriffis'
-#                      % (playerName, int(age), teamName, ssn, Comp, player_pos, minutesPlayed, signature),
-#                      fontsize=18,
-#                     color="#4A2E19", fontweight="bold", fontname="DejaVu Sans")
-        plt.style.use("default")
-
-        fig = plt.gcf()
-        
-        fig.patch.set_facecolor('#fbf9f4')
-        ax1.set_facecolor('#fbf9f4')
-        ax2.set_facecolor('#fbf9f4')
-        ax3.set_facecolor('#fbf9f4')
-        ax4.set_facecolor('#fbf9f4')
-        ax5.set_facecolor('#fbf9f4')
-        ax6.set_facecolor('#fbf9f4')
-        ax7.set_facecolor('#fbf9f4')
-        ax8.set_facecolor('#fbf9f4')
-        ax9.set_facecolor('#fbf9f4')
-        ax10.set_facecolor('#fbf9f4')
-        ax11.set_facecolor('#fbf9f4')
-        ax12.set_facecolor('#fbf9f4')
-        
-        fig.text(0.11, .05,
-                   'Red: Bottm 30%',
-                   fontsize=10, color='red')
-        fig.text(0.28, .05,
-                   'Orange: 30th to 50th percentile',
-                   fontsize=10, color='orange')
-        fig.text(0.4625, .05,
-                   'Grey: 50th to 70th percentile',
-                   fontsize=10, color='darkgrey')
-        fig.text(0.6575, .05,
-                   'Light Green: 70th to 90th percentile',
-                   fontsize=10, color='yellowgreen')
-        fig.text(0.845, .05,
-                   'Dark Green: Top 10%',
-                   fontsize=10, color='darkgreen')
-        
-        fig.text(0.11,-.01,
-                'All values except percentages & distance are per 90 minutes\nCompared to %s %ss, %i+ minutes\nData from Opta via FBRef' %(Comp, player_pos, minutesPlayed),
-                fontsize=14, color='#4A2E19', va='top', ha='left')
-        fig.text(0.92,-.01,
-                '%s\n\nCreated: %s | Code by @BeGriffis' %(data_date, signature),
-                fontsize=14, color='#4A2E19', va='top', ha='right')
-        
-        fig.text(.5,1.0,
-                '%s (%i, %s, %s)' %(playerName, int(age), teamName, ssn),
-                fontsize=25, color="#4A2E19", fontweight="bold", va='center', ha='center')
-        
-        fig.set_size_inches(20, 10) #length, height
-#         saveinput = input("Save figure? y/n ")
-        if saveinput == "y":
-            fig.savefig("%s%s %s gk.png" %(root, playerName, ssn), dpi=220, bbox_inches='tight')
-        print("Minutes: %i" %minutes)
-        fig = plt.gcf()
-        fig.set_size_inches(20, 10) #length, height
-        fig
-
-    def main():
-#         qq = input("What program? fw/mf/df/gk ")
-        if program == "fw":
-            strikers()
-        if program == "mf":
-            midfielders()
-        if program == "df":
-            defenders()
-        if program == "gk":
-            goalkeepers()
-    main()

@@ -4,7 +4,7 @@ import os
 from sqlalchemy import create_engine
 
 data_download_loc = '/Users/Mao/Downloads'
-chrome_driver_loc = '/Users/Mao/Downloads/chromedriver-mac-arm64 2/chromedriver' 
+chrome_driver_loc = '/Users/Mao/Downloads/chromedriver-mac-arm64 3/chromedriver' 
 
 comps_postgres_t5 = {
     'Serie A': 'serie_a',

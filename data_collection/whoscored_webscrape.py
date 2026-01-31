@@ -22,7 +22,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import clipboard
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
-from utilities import all_teams, serieA_teams, leagues, create_table, data_download_loc, chrome_driver_loc
+from utilities import all_teams, serieA_teams, leagues, create_table_whoscored, data_download_loc, chrome_driver_loc
 
 
 for team, team_id in serieA_teams.items():                                      # need to change this
@@ -34,7 +34,7 @@ for team, team_id in serieA_teams.items():                                      
     print(f"Team: {team}, League: {league}")
     
     # getting match urls from the base url
-    if league == 'serie_a':
+    if league == 'ita_serie_a':
         base_url = f'https://www.whoscored.com/teams/{team_id}/fixtures/italy-{team}'
     elif league == 'la_liga':
         base_url = f'https://www.whoscored.com/teams/{team_id}/fixtures/spain-{team}'
@@ -55,7 +55,7 @@ for team, team_id in serieA_teams.items():                                      
 
     time.sleep(20)
     
-    agree = driver.find_element(By.XPATH, "//div[@class='qc-cmp2-summary-buttons']/button[2]").click()
+    agree = driver.find_element(By.XPATH, "//div[@class='Frame-buoy__sc-1d4hofp-0 fSVQFz']/button").click()
     
     div_path = driver.find_element(By.XPATH, "//div[@id='team-fixtures']/div")      # finding the path to the match urls
     child_divs = div_path.find_elements(By.XPATH, "./div")
@@ -161,7 +161,7 @@ for team, team_id in serieA_teams.items():                                      
         data_download_loc,
         f'{team}_data.csv'), index=False)
     
-    create_table(data, 
+    create_table_whoscored(data, 
                  league = f'{league}', 
                  team = f'{team}')
         
